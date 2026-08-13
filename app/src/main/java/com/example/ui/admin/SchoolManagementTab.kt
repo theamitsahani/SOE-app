@@ -117,24 +117,31 @@ fun SchoolManagementTab(
                         Text("Total: ${schools.size} schools enrolled", fontSize = 12.sp, color = Slate500)
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedButton(
                             onClick = { showAddSchoolDialog = true },
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = Indigo600)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add School", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp), tint = Indigo600)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("+ Add", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Indigo600)
                         }
 
                         Button(
                             onClick = { filePickerLauncher.launch("*/*") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp)
                         ) {
-                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Import Excel", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Import Excel", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

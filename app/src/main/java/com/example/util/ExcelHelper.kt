@@ -9,12 +9,14 @@ import com.example.data.model.School
 import com.example.data.model.Visit
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import java.io.BufferedReader
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.util.UUID
+import java.util.zip.ZipInputStream
 
 data class ImportValidationResult(
     val totalRows: Int,
@@ -55,18 +57,19 @@ object ExcelHelper {
     }
 
     /**
-     * Parses uploaded CSV / Excel content.
-     * Specific User Column Specification:
-     * Column A (0): S.R (Ignored)
-     * Column B (1): DISTRICT
-     * Column C (2): SCHOOL NAME -> Must not be empty. Only invalid if Column C is blank!
-     * Column D (3): TYPE
-     * Column E (4): VILLAGE
-     * Column F (5): PRINCIPAL NAME
-     * Column G (6): BLOCK
-     * Column H (7): MOB
+     * Parses uploaded CSV or native Excel (.xlsx) file.
+     * Column Mapping Rules:
+     * 1st Row (Header Row): Ignored & Not counted. Reading starts strictly from 2nd row (index 1).
+     * Column A (0): State Name
+     * Column B (1): District Name
+     * Column C (2): School Name (Required: Row is INVALID ONLY if Column C is empty)
+     * Column D (3): School Type
+     * Column E (4): Village Name
+     * Column F (5): Principal Name
+     * Column G (6): Block Name
+     * Column H (7): Principal Mobile Number
      * Column I (8): Visit Date
-     * Column J (9): Status -> If Column I is date & Column J is "TRUE" / "True", marked as COMPLETED!
+     * Column J (9) / Column G: Status -> If "TRUE"/"True"/"1"/"YES"/"COMPLETED", marked as COMPLETED Visit!
      */
     fun parseSchoolCsv(context: Context, uri: Uri, existingSchools: List<School>): ImportValidationResult {
         val errors = mutableListOf<String>()
@@ -81,80 +84,47 @@ object ExcelHelper {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return ImportValidationResult(
                 0, 0, 0, 0, emptyList(), emptyList(), listOf("Failed to read file content")
             )
-            val reader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8))
-            val lines = reader.readLines()
-            if (lines.isEmpty()) {
+            val bytes = inputStream.readBytes()
+            inputStream.close()
+
+            if (bytes.isEmpty()) {
                 return ImportValidationResult(0, 0, 0, 0, emptyList(), emptyList(), listOf("Uploaded file is empty"))
             }
 
-            // Check if first line is a header
-            val firstLine = lines.first()
-            val firstCols = parseCsvLine(firstLine).map { it.trim().uppercase() }
-            val hasHeader = firstCols.any { it.contains("DISTRICT") || it.contains("SCHOOL") || it == "S.R" || it == "SR" }
-
-            val startIndex = if (hasHeader) 1 else 0
-
-            // Column indices
-            var districtIdx = 1
-            var schoolNameIdx = 2
-            var typeIdx = 3
-            var villageIdx = 4
-            var principalNameIdx = 5
-            var blockIdx = 6
-            var mobIdx = 7
-            var visitDateIdx = 8
-            var statusIdx = 9
-
-            if (hasHeader) {
-                val dIdx = firstCols.indexOfFirst { it.contains("DISTRICT") }
-                if (dIdx >= 0) districtIdx = dIdx
-
-                val sIdx = firstCols.indexOfFirst { it.contains("SCHOOL") || it.contains("NAME") }
-                if (sIdx >= 0) schoolNameIdx = sIdx
-
-                val tIdx = firstCols.indexOfFirst { it == "TYPE" }
-                if (tIdx >= 0) typeIdx = tIdx
-
-                val vIdx = firstCols.indexOfFirst { it == "VILLAGE" }
-                if (vIdx >= 0) villageIdx = vIdx
-
-                val pIdx = firstCols.indexOfFirst { it.contains("PRINCIPAL") }
-                if (pIdx >= 0) principalNameIdx = pIdx
-
-                val bIdx = firstCols.indexOfFirst { it == "BLOCK" }
-                if (bIdx >= 0) blockIdx = bIdx
-
-                val mIdx = firstCols.indexOfFirst { it.contains("MOB") || it.contains("PHONE") }
-                if (mIdx >= 0) mobIdx = mIdx
-
-                val vdIdx = firstCols.indexOfFirst { it.contains("VISIT") || it.contains("DATE") }
-                if (vdIdx >= 0) visitDateIdx = vdIdx
-
-                val stIdx = firstCols.indexOfFirst { it.contains("STATUS") }
-                if (stIdx >= 0) statusIdx = stIdx
+            val parsedRows: List<List<String>> = if (isXlsxZip(bytes)) {
+                readXlsxRows(bytes)
+            } else {
+                readCsvRows(bytes)
             }
 
-            val existingNames = existingSchools.map { it.schoolName.trim().lowercase() }.toSet()
-            val existingRefCodes = existingSchools.map { it.referenceCode.trim() }.filter { it.isNotEmpty() }.toSet()
+            if (parsedRows.size <= 1) {
+                return ImportValidationResult(0, 0, 0, 0, emptyList(), emptyList(), listOf("File contains no data rows (only header or empty)"))
+            }
 
-            for (i in startIndex until lines.size) {
-                val line = lines[i]
-                if (line.isBlank()) continue
+            val existingNames = existingSchools.map { cleanText(it.schoolName).lowercase() }.toSet()
+            val existingRefCodes = existingSchools.map { cleanText(it.referenceCode) }.filter { it.isNotEmpty() }.toSet()
+
+            // Skip row 0 (1st row is header). Process starting strictly from index 1 (2nd row).
+            for (i in 1 until parsedRows.size) {
+                val row = parsedRows[i]
+                if (row.all { it.isBlank() }) continue
+
                 totalRows++
 
-                val cols = parseCsvLine(line)
-                fun getCol(idx: Int): String = if (idx >= 0 && idx < cols.size) cols[idx].trim() else ""
+                fun getCol(idx: Int): String {
+                    return if (idx >= 0 && idx < row.size) cleanText(row[idx]) else ""
+                }
 
-                val rawSchoolName = getCol(schoolNameIdx)
-                val district = getCol(districtIdx)
-                val block = getCol(blockIdx)
-                val principal = getCol(principalNameIdx)
-                val mobile = getCol(mobIdx)
-                val sr = getCol(0) // Column A ignored, but kept if needed
-                val type = getCol(typeIdx)
-                val village = getCol(villageIdx)
-                val visitDate = getCol(visitDateIdx)
-                val statusStr = getCol(statusIdx)
+                val state = getCol(0)         // Column A
+                val district = getCol(1)      // Column B
+                val rawSchoolName = getCol(2) // Column C
+                val type = getCol(3)          // Column D
+                val village = getCol(4)       // Column E
+                val principal = getCol(5)     // Column F
+                val block = getCol(6)         // Column G
+                val mobile = getCol(7)        // Column H
+                val visitDate = getCol(8)     // Column I
+                val statusStr = getCol(9)     // Column J
 
                 // RULE: ONLY if Column C (school name) is empty, consider row INVALID
                 if (rawSchoolName.isBlank()) {
@@ -163,6 +133,7 @@ object ExcelHelper {
                     continue
                 }
 
+                // Extract reference code from brackets if present e.g. "GSSS School (8788688)"
                 val bracketRegex = Regex("""\(([^)]+)\)""")
                 val match = bracketRegex.find(rawSchoolName)
                 val referenceCode = match?.groupValues?.get(1)?.trim() ?: ""
@@ -179,7 +150,7 @@ object ExcelHelper {
 
                 val school = School(
                     schoolId = schoolId,
-                    sr = sr,
+                    state = state.ifBlank { "Rajasthan" },
                     district = district.ifBlank { "Rajasthan" },
                     schoolName = schoolNameClean,
                     referenceCode = referenceCode,
@@ -196,18 +167,17 @@ object ExcelHelper {
                 schools.add(school)
                 validRows++
 
-                // RULE: If Column I is filled with date AND Column J is TRUE / True -> mark school as COMPLETE
-                val isCompleted = visitDate.isNotBlank() && (
-                    statusStr.equals("TRUE", ignoreCase = true) ||
-                    statusStr.equals("1") ||
-                    statusStr.equals("YES", ignoreCase = true) ||
-                    statusStr.equals("COMPLETED", ignoreCase = true)
-                )
+                // RULE: If Column J or Column G or status string is "TRUE"/"True"/"1"/"YES"/"COMPLETED" -> mark as Completed Visit
+                val isCompleted = statusStr.equals("TRUE", ignoreCase = true) ||
+                        statusStr.equals("1") ||
+                        statusStr.equals("YES", ignoreCase = true) ||
+                        statusStr.equals("COMPLETED", ignoreCase = true) ||
+                        block.equals("TRUE", ignoreCase = true)
 
                 if (isCompleted) {
                     val answers = com.example.data.model.VisitAnswers(
                         q1_soeName = "Excel Import System",
-                        q2_visitDate = visitDate,
+                        q2_visitDate = visitDate.ifBlank { "Imported" },
                         q3_schoolName = schoolNameClean,
                         q4_udiseCode = referenceCode,
                         q5_district = district,
@@ -231,7 +201,7 @@ object ExcelHelper {
                         schoolName = schoolNameClean,
                         district = district,
                         block = block,
-                        visitDate = visitDate,
+                        visitDate = visitDate.ifBlank { "Imported" },
                         status = com.example.data.model.VisitStatus.SUBMITTED,
                         answersJson = answersAdapter.toJson(answers),
                         photosJson = "{}",
@@ -254,6 +224,192 @@ object ExcelHelper {
             completedVisitsToImport = completedVisits,
             errors = errors
         )
+    }
+
+    /**
+     * Sanitizes strings to prevent garbled unicode replacement characters or binary control chars.
+     */
+    private fun cleanText(input: String): String {
+        if (input.isBlank()) return ""
+        var cleaned = input.replace("\uFEFF", "") // strip BOM
+            .replace("\uFFFD", "")                 // strip unicode replacement character diamond
+            .replace(Regex("""[\x00-\x08\x0B\x0C\x0E-\x1F]"""), "") // strip control characters
+            .trim()
+        return cleaned
+    }
+
+    private fun isXlsxZip(bytes: ByteArray): Boolean {
+        return bytes.size >= 4 &&
+                bytes[0] == 0x50.toByte() &&
+                bytes[1] == 0x4B.toByte() &&
+                bytes[2] == 0x03.toByte() &&
+                bytes[3] == 0x04.toByte()
+    }
+
+    /**
+     * Native parser for Excel .xlsx ZIP archive using ZipInputStream + XmlPullParser.
+     */
+    private fun readXlsxRows(bytes: ByteArray): List<List<String>> {
+        val sharedStrings = mutableListOf<String>()
+        val sheetRows = mutableMapOf<Int, MutableMap<Int, String>>()
+
+        // Step 1: Extract sharedStrings.xml
+        try {
+            val zis = ZipInputStream(ByteArrayInputStream(bytes))
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (entry.name.endsWith("sharedStrings.xml")) {
+                    val factory = XmlPullParserFactory.newInstance()
+                    factory.isNamespaceAware = true
+                    val parser = factory.newPullParser()
+                    parser.setInput(zis, "UTF-8")
+                    var eventType = parser.eventType
+                    var inText = false
+                    val currentSb = StringBuilder()
+
+                    while (eventType != XmlPullParser.END_DOCUMENT) {
+                        when (eventType) {
+                            XmlPullParser.START_TAG -> {
+                                if (parser.name == "t") inText = true
+                            }
+                            XmlPullParser.TEXT -> {
+                                if (inText) currentSb.append(parser.text)
+                            }
+                            XmlPullParser.END_TAG -> {
+                                if (parser.name == "t") inText = false
+                                else if (parser.name == "si") {
+                                    sharedStrings.add(currentSb.toString().trim())
+                                    currentSb.clear()
+                                }
+                            }
+                        }
+                        eventType = parser.next()
+                    }
+                    break
+                }
+                entry = zis.nextEntry
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Step 2: Extract sheet1.xml (or first worksheet)
+        try {
+            val zis = ZipInputStream(ByteArrayInputStream(bytes))
+            var entry = zis.nextEntry
+            while (entry != null) {
+                if (entry.name.contains("worksheets/sheet")) {
+                    val factory = XmlPullParserFactory.newInstance()
+                    factory.isNamespaceAware = true
+                    val parser = factory.newPullParser()
+                    parser.setInput(zis, "UTF-8")
+
+                    var eventType = parser.eventType
+                    var currentRowIdx = -1
+                    var currentColIdx = -1
+                    var cellType = ""
+                    val cellValue = StringBuilder()
+
+                    while (eventType != XmlPullParser.END_DOCUMENT) {
+                        when (eventType) {
+                            XmlPullParser.START_TAG -> {
+                                if (parser.name == "row") {
+                                    val rAttr = parser.getAttributeValue(null, "r")
+                                    currentRowIdx = (rAttr?.toIntOrNull() ?: (currentRowIdx + 2)) - 1
+                                    if (!sheetRows.containsKey(currentRowIdx)) {
+                                        sheetRows[currentRowIdx] = mutableMapOf()
+                                    }
+                                } else if (parser.name == "c") {
+                                    val rRef = parser.getAttributeValue(null, "r")
+                                    cellType = parser.getAttributeValue(null, "t") ?: ""
+                                    if (rRef != null) {
+                                        currentColIdx = colRefToIndex(rRef)
+                                    } else {
+                                        currentColIdx++
+                                    }
+                                    cellValue.clear()
+                                }
+                            }
+                            XmlPullParser.TEXT -> {
+                                cellValue.append(parser.text)
+                            }
+                            XmlPullParser.END_TAG -> {
+                                if (parser.name == "c") {
+                                    val rawVal = cellValue.toString().trim()
+                                    var finalVal = rawVal
+                                    if (cellType == "s") {
+                                        val idx = rawVal.toIntOrNull()
+                                        if (idx != null && idx in sharedStrings.indices) {
+                                            finalVal = sharedStrings[idx]
+                                        }
+                                    }
+                                    if (currentRowIdx >= 0 && currentColIdx >= 0) {
+                                        val rowMap = sheetRows.getOrPut(currentRowIdx) { mutableMapOf() }
+                                        rowMap[currentColIdx] = finalVal
+                                    }
+                                }
+                            }
+                        }
+                        eventType = parser.next()
+                    }
+                    break
+                }
+                entry = zis.nextEntry
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        if (sheetRows.isEmpty()) return emptyList()
+
+        val maxRow = sheetRows.keys.maxOrNull() ?: 0
+        val result = mutableListOf<List<String>>()
+        for (r in 0..maxRow) {
+            val rowMap = sheetRows[r]
+            if (rowMap == null) {
+                result.add(emptyList())
+            } else {
+                val maxCol = rowMap.keys.maxOrNull() ?: 0
+                val rowList = mutableListOf<String>()
+                for (c in 0..maxCol) {
+                    rowList.add(rowMap[c] ?: "")
+                }
+                result.add(rowList)
+            }
+        }
+        return result
+    }
+
+    private fun colRefToIndex(ref: String): Int {
+        val colLetters = ref.takeWhile { it.isLetter() }.uppercase()
+        var idx = 0
+        for (ch in colLetters) {
+            idx = idx * 26 + (ch - 'A' + 1)
+        }
+        return (idx - 1).coerceAtLeast(0)
+    }
+
+    /**
+     * Reads CSV content handling UTF-8, UTF-8 BOM, UTF-16, and Windows-1252 encodings.
+     */
+    private fun readCsvRows(bytes: ByteArray): List<List<String>> {
+        var text = String(bytes, Charsets.UTF_8)
+        if (text.contains("\uFFFD")) {
+            // Try Windows-1252 or UTF-16 if UTF-8 resulted in invalid chars
+            val textW1252 = String(bytes, charset("Windows-1252"))
+            if (!textW1252.contains("\uFFFD")) {
+                text = textW1252
+            }
+        }
+        text = text.replace("\uFEFF", "") // remove BOM
+
+        val lines = text.lines()
+        val result = mutableListOf<List<String>>()
+        for (line in lines) {
+            if (line.isBlank()) continue
+            result.add(parseCsvLine(line))
+        }
+        return result
     }
 
     private fun parseCsvLine(line: String): List<String> {
@@ -317,7 +473,7 @@ object ExcelHelper {
     private fun parseVisitAnswers(json: String): com.example.data.model.VisitAnswers {
         if (json.isBlank()) return com.example.data.model.VisitAnswers()
         return try {
-            val moshi = com.squareup.moshi.Moshi.Builder().addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory()).build()
+            val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
             val adapter = moshi.adapter(com.example.data.model.VisitAnswers::class.java)
             adapter.fromJson(json) ?: com.example.data.model.VisitAnswers()
         } catch (e: Exception) {
