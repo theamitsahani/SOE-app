@@ -80,6 +80,7 @@ fun EmployeeManagementTab(
     var searchQuery by remember { mutableStateOf("") }
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<User?>(null) }
+    var selectedEmployeeForDetails by remember { mutableStateOf<User?>(null) }
 
     val filteredEmployees = remember(employees, searchQuery) {
         if (searchQuery.isBlank()) employees
@@ -95,22 +96,24 @@ fun EmployeeManagementTab(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         item {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("SOE Field Officers", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Navy900)
-                    Text("${employees.size} active & registered officers", fontSize = 11.sp, color = Slate500)
+                    Text("SOE Field Officers", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                    Text("${employees.count { it.status == UserStatus.ACTIVE }} Active • ${employees.size} Total Officers", fontSize = 11.sp, color = Slate500)
                 }
 
                 Button(
                     onClick = { showAddEmployeeDialog = true },
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
                 ) {
@@ -125,7 +128,7 @@ fun EmployeeManagementTab(
             SearchTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = "Search officer by name, district, state, email..."
+                placeholder = "Search officer by name, district, state..."
             )
         }
 
@@ -152,6 +155,7 @@ fun EmployeeManagementTab(
             items(filteredEmployees) { emp ->
                 CompactEmployeeCardItem(
                     employee = emp,
+                    onClick = { selectedEmployeeForDetails = emp },
                     onEditClick = { employeeToEdit = emp },
                     onToggleStatus = { newStatus ->
                         onSaveEmployee(emp.copy(status = newStatus)) {}
@@ -159,6 +163,134 @@ fun EmployeeManagementTab(
                 )
             }
         }
+    }
+
+    // View Details Dialog on Tap
+    if (selectedEmployeeForDetails != null) {
+        val emp = selectedEmployeeForDetails!!
+        val context = LocalContext.current
+
+        AlertDialog(
+            onDismissRequest = { selectedEmployeeForDetails = null },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(emp.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Navy900)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (emp.status == UserStatus.ACTIVE) Color(0xFFDCFCE7) else Color(0xFFFEE2E2))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = if (emp.status == UserStatus.ACTIVE) "ACTIVE (सक्रिय)" else "INACTIVE (निष्क्रिय)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (emp.status == UserStatus.ACTIVE) Color(0xFF15803D) else Color(0xFFB91C1C)
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Location
+                    DetailItem(label = "State & District (राज्य व जिला)", value = "${emp.state.ifBlank { "Rajasthan" }} • ${emp.district.ifBlank { "All Districts" }}")
+
+                    // Email
+                    DetailItem(label = "Email Address (ईमेल)", value = emp.email)
+
+                    // Mobile Number with Direct Call Action
+                    Column {
+                        Text("Mobile Number (मोबाइल नंबर)", fontSize = 11.sp, color = Slate500, fontWeight = FontWeight.Medium)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = emp.mobile.ifBlank { "Not provided" },
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Navy900
+                            )
+                            if (emp.mobile.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${emp.mobile}"))
+                                        context.startActivity(intent)
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(13.dp), tint = Indigo600)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Call", fontSize = 11.sp, color = Indigo600)
+                                }
+                            }
+                        }
+                    }
+
+                    // Password
+                    if (emp.password.isNotBlank()) {
+                        DetailItem(label = "Login Password (पासवर्ड)", value = emp.password)
+                    }
+
+                    // Toggle Status Option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Slate100)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Active Status (सक्रिय/निष्क्रिय)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Slate700)
+                        Switch(
+                            checked = emp.status == UserStatus.ACTIVE,
+                            onCheckedChange = { checked ->
+                                val newStatus = if (checked) UserStatus.ACTIVE else UserStatus.INACTIVE
+                                val updated = emp.copy(status = newStatus)
+                                selectedEmployeeForDetails = updated
+                                onSaveEmployee(updated) {}
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Indigo600
+                            )
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val toEdit = emp
+                        selectedEmployeeForDetails = null
+                        employeeToEdit = toEdit
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Edit Details")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedEmployeeForDetails = null }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 
     // Add Employee Dialog
@@ -173,7 +305,7 @@ fun EmployeeManagementTab(
 
         AlertDialog(
             onDismissRequest = { showAddEmployeeDialog = false },
-            title = { Text("Add New Field Officer", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            title = { Text("Add New Field Officer", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -182,14 +314,14 @@ fun EmployeeManagementTab(
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Full Name (नाम)", fontSize = 11.sp) },
+                        label = { Text("Full Name (नाम) *", fontSize = 11.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text("Email Address (ईमेल)", fontSize = 11.sp) },
+                        label = { Text("Email Address (ईमेल) *", fontSize = 11.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -233,12 +365,12 @@ fun EmployeeManagementTab(
                         isSaving = true
                         val newEmp = User(
                             userId = "emp_" + UUID.randomUUID().toString().take(8),
-                            name = name,
-                            email = email,
-                            mobile = mobile,
-                            state = state.ifBlank { "Rajasthan" },
-                            district = district,
-                            password = password.ifBlank { "emp123" },
+                            name = name.trim(),
+                            email = email.trim(),
+                            mobile = mobile.trim(),
+                            state = state.trim().ifBlank { "Rajasthan" },
+                            district = district.trim(),
+                            password = password.trim().ifBlank { "emp123" },
                             role = UserRole.EMPLOYEE,
                             status = UserStatus.ACTIVE
                         )
@@ -247,7 +379,9 @@ fun EmployeeManagementTab(
                             showAddEmployeeDialog = false
                         }
                     },
-                    enabled = !isSaving && name.isNotBlank() && email.isNotBlank()
+                    enabled = !isSaving && name.isNotBlank() && email.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Create Officer")
                 }
@@ -274,7 +408,7 @@ fun EmployeeManagementTab(
 
         AlertDialog(
             onDismissRequest = { employeeToEdit = null },
-            title = { Text("Edit Officer Details", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            title = { Text("Edit Officer Details", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -334,7 +468,11 @@ fun EmployeeManagementTab(
                         Text("Account Status (सक्रिय/निष्क्रिय)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         Switch(
                             checked = status == UserStatus.ACTIVE,
-                            onCheckedChange = { checked -> status = if (checked) UserStatus.ACTIVE else UserStatus.INACTIVE }
+                            onCheckedChange = { checked -> status = if (checked) UserStatus.ACTIVE else UserStatus.INACTIVE },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Indigo600
+                            )
                         )
                     }
                 }
@@ -344,12 +482,12 @@ fun EmployeeManagementTab(
                     onClick = {
                         isSaving = true
                         val updated = emp.copy(
-                            name = name,
-                            email = email,
-                            mobile = mobile,
-                            state = state,
-                            district = district,
-                            password = password,
+                            name = name.trim(),
+                            email = email.trim(),
+                            mobile = mobile.trim(),
+                            state = state.trim(),
+                            district = district.trim(),
+                            password = password.trim(),
                             status = status
                         )
                         onSaveEmployee(updated) {
@@ -357,7 +495,9 @@ fun EmployeeManagementTab(
                             employeeToEdit = null
                         }
                     },
-                    enabled = !isSaving && name.isNotBlank() && email.isNotBlank()
+                    enabled = !isSaving && name.isNotBlank() && email.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Save Changes")
                 }
@@ -372,15 +512,24 @@ fun EmployeeManagementTab(
 }
 
 @Composable
+private fun DetailItem(label: String, value: String) {
+    Column {
+        Text(label, fontSize = 11.sp, color = Slate500, fontWeight = FontWeight.Medium)
+        Text(value.ifBlank { "—" }, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Navy900)
+    }
+}
+
+@Composable
 fun CompactEmployeeCardItem(
     employee: User,
+    onClick: () -> Unit,
     onEditClick: () -> Unit,
     onToggleStatus: (UserStatus) -> Unit
 ) {
-    val context = LocalContext.current
-
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -388,111 +537,66 @@ fun CompactEmployeeCardItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Initial Badge
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(if (employee.status == UserStatus.ACTIVE) Indigo600 else Slate500),
-                contentAlignment = Alignment.Center
-            ) {
+            // Left Column: Name & State/District
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = employee.name.take(1).uppercase(),
-                    color = Color.White,
+                    text = employee.name,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    color = Navy900
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${employee.state.ifBlank { "Rajasthan" }} • ${employee.district.ifBlank { "All Districts" }}",
+                    fontSize = 12.sp,
+                    color = Slate500
                 )
             }
 
-            // Info Column
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = employee.name,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Navy900,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    if (employee.district.isNotBlank()) {
-                        Text(
-                            text = "${employee.district}, ${employee.state.ifBlank { "RJ" }}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Indigo600,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Slate100)
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = employee.email,
-                        fontSize = 11.sp,
-                        color = Slate500
-                    )
-                    if (employee.mobile.isNotBlank()) {
-                        Text(
-                            text = " • 📞 ${employee.mobile}",
-                            fontSize = 11.sp,
-                            color = Indigo600,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.clickable {
-                                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${employee.mobile}"))
-                                context.startActivity(intent)
-                            }
-                        )
-                    }
-                }
-
-                if (employee.password.isNotBlank()) {
-                    Text(
-                        text = "🔑 Pass: ${employee.password}",
-                        fontSize = 10.sp,
-                        color = Slate700,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            // Action Buttons
+            // Right Row: Status Dot (Green for Active, Red for Inactive) + Edit Button
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Status Indicator Dot: Green for Active, Red for Inactive
+                val isActive = employee.status == UserStatus.ACTIVE
+                val dotColor = if (isActive) Color(0xFF10B981) else Color(0xFFEF4444)
+                val dotBg = if (isActive) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(dotBg)
+                        .clickable {
+                            onToggleStatus(if (isActive) UserStatus.INACTIVE else UserStatus.ACTIVE)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
+                    )
+                }
+
+                // Edit Button
                 IconButton(
                     onClick = onEditClick,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "Edit Officer",
                         tint = Indigo600,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-
-                Switch(
-                    checked = employee.status == UserStatus.ACTIVE,
-                    onCheckedChange = { checked ->
-                        onToggleStatus(if (checked) UserStatus.ACTIVE else UserStatus.INACTIVE)
-                    },
-                    modifier = Modifier.size(32.dp),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Indigo600
-                    )
-                )
             }
         }
     }

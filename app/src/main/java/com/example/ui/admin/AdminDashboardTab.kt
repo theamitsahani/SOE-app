@@ -249,28 +249,49 @@ fun KpiCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = if (onClick != null) modifier.clickable { onClick() } else modifier,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(86.dp)
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(bgColor),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             }
-            Column {
-                Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                Text(text = title, fontSize = 11.sp, color = Slate500, fontWeight = FontWeight.Medium)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = value,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    lineHeight = 22.sp
+                )
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    color = Slate500,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    lineHeight = 14.sp
+                )
             }
         }
     }

@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.School
 import com.example.data.model.Task
 import com.example.data.model.User
+import com.example.data.model.UserStatus
 import com.example.ui.components.StatusChip
 import com.example.ui.theme.Indigo600
 import com.example.ui.theme.Navy900
@@ -102,30 +103,47 @@ fun AssignVisitsTab(
     var message by remember { mutableStateOf<String?>(null) }
     var selectedVisitForDetails by remember { mutableStateOf<Visit?>(null) }
 
-    val stateList = remember(schools) {
-        listOf("All States") + schools.map { if (it.state.isNotBlank()) it.state else "Rajasthan" }.distinct()
+    // Exclude schools that are already assigned to a task or have a visit completed/submitted/reviewed
+    val completedOrAssignedSchoolIds = remember(assignedTasks, visits, schools) {
+        val fromTasks = assignedTasks.map { it.schoolId }
+        val fromVisits = visits.map { it.schoolId }
+        val fromSchoolDates = schools.filter { it.visitDate.isNotBlank() }.map { it.schoolId }
+        (fromTasks + fromVisits + fromSchoolDates).toSet()
     }
 
-    val districtList = remember(schools, selectedState) {
-        val base = if (selectedState == "All States") schools else schools.filter { (it.state.ifBlank { "Rajasthan" }) == selectedState }
+    val availableSchools = remember(schools, completedOrAssignedSchoolIds) {
+        schools.filter { school -> !completedOrAssignedSchoolIds.contains(school.schoolId) }
+    }
+
+    val stateList = remember(availableSchools) {
+        listOf("All States") + availableSchools.map { if (it.state.isNotBlank()) it.state else "Rajasthan" }.distinct()
+    }
+
+    val districtList = remember(availableSchools, selectedState) {
+        val base = if (selectedState == "All States") availableSchools else availableSchools.filter { (it.state.ifBlank { "Rajasthan" }) == selectedState }
         listOf("All Districts") + base.map { it.district }.filter { it.isNotBlank() }.distinct()
     }
 
-    val blockList = remember(schools, selectedState, selectedDistrict) {
-        val base = schools.filter {
+    val blockList = remember(availableSchools, selectedState, selectedDistrict) {
+        val base = availableSchools.filter {
             (selectedState == "All States" || (it.state.ifBlank { "Rajasthan" }) == selectedState) &&
             (selectedDistrict == "All Districts" || it.district == selectedDistrict)
         }
         listOf("All Blocks") + base.map { it.block }.filter { it.isNotBlank() }.distinct()
     }
 
-    val filteredSchools = remember(schools, selectedState, selectedDistrict, selectedBlock) {
-        schools.filter { school ->
+    val filteredSchools = remember(availableSchools, selectedState, selectedDistrict, selectedBlock) {
+        availableSchools.filter { school ->
             val sState = school.state.ifBlank { "Rajasthan" }
             (selectedState == "All States" || sState == selectedState) &&
             (selectedDistrict == "All Districts" || school.district == selectedDistrict) &&
             (selectedBlock == "All Blocks" || school.block == selectedBlock)
         }
+    }
+
+    // Only ACTIVE employees can be assigned tasks; inactive employees are excluded
+    val activeEmployees = remember(employees) {
+        employees.filter { it.status == UserStatus.ACTIVE }
     }
 
     // Determine target district for officer filtering
@@ -134,12 +152,12 @@ fun AssignVisitsTab(
         if (d == "All Districts") "" else d
     }
 
-    val filteredEmployees = remember(employees, targetDistrict) {
+    val filteredEmployees = remember(activeEmployees, targetDistrict) {
         if (targetDistrict.isBlank()) {
-            employees
+            activeEmployees
         } else {
-            val matched = employees.filter { it.district.equals(targetDistrict, ignoreCase = true) }
-            if (matched.isNotEmpty()) matched else employees
+            val matched = activeEmployees.filter { it.district.equals(targetDistrict, ignoreCase = true) }
+            if (matched.isNotEmpty()) matched else activeEmployees
         }
     }
 
@@ -299,7 +317,7 @@ fun AssignVisitsTab(
                             value = selectedSchool?.schoolName ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Select Target School (${filteredSchools.size} available)") },
+                            label = { Text("Select Target School (${filteredSchools.size} unassigned)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = schoolDropdownExpanded) },
                             shape = RoundedCornerShape(12.dp),
                             colors = textFieldColors,
@@ -312,14 +330,21 @@ fun AssignVisitsTab(
                             expanded = schoolDropdownExpanded,
                             onDismissRequest = { schoolDropdownExpanded = false }
                         ) {
-                            filteredSchools.forEach { school ->
+                            if (filteredSchools.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("${school.schoolName} (${school.block}, ${school.district})", fontSize = 13.sp) },
-                                    onClick = {
-                                        selectedSchool = school
-                                        schoolDropdownExpanded = false
-                                    }
+                                    text = { Text("No unassigned schools available (All assigned/completed)", color = Slate500, fontSize = 12.sp) },
+                                    onClick = { schoolDropdownExpanded = false }
                                 )
+                            } else {
+                                filteredSchools.forEach { school ->
+                                    DropdownMenuItem(
+                                        text = { Text("${school.schoolName} (${school.block}, ${school.district})", fontSize = 13.sp) },
+                                        onClick = {
+                                            selectedSchool = school
+                                            schoolDropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -338,7 +363,7 @@ fun AssignVisitsTab(
                                 Icon(Icons.Default.LocationOn, contentDescription = null, tint = Indigo600, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Filtered Officers in $targetDistrict: ${filteredEmployees.size} available",
+                                    text = "Active Officers in $targetDistrict: ${filteredEmployees.size} available",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Indigo600
@@ -356,7 +381,7 @@ fun AssignVisitsTab(
                             value = selectedEmployee1?.let { "${it.name} (${it.district.ifBlank { "Unassigned" }})" } ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Primary Field Officer (कर्मचारी 1) *") },
+                            label = { Text("Primary Field Officer (सक्रिय कर्मचारी 1) *") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = employee1DropdownExpanded) },
                             shape = RoundedCornerShape(12.dp),
                             colors = textFieldColors,
@@ -369,14 +394,21 @@ fun AssignVisitsTab(
                             expanded = employee1DropdownExpanded,
                             onDismissRequest = { employee1DropdownExpanded = false }
                         ) {
-                            filteredEmployees.forEach { emp ->
+                            if (filteredEmployees.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("${emp.name} • ${emp.district} (${emp.email})", fontSize = 13.sp) },
-                                    onClick = {
-                                        selectedEmployee1 = emp
-                                        employee1DropdownExpanded = false
-                                    }
+                                    text = { Text("No active officers available", color = Slate500, fontSize = 12.sp) },
+                                    onClick = { employee1DropdownExpanded = false }
                                 )
+                            } else {
+                                filteredEmployees.forEach { emp ->
+                                    DropdownMenuItem(
+                                        text = { Text("${emp.name} • ${emp.district} (${emp.email})", fontSize = 13.sp) },
+                                        onClick = {
+                                            selectedEmployee1 = emp
+                                            employee1DropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
