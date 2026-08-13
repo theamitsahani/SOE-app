@@ -762,12 +762,11 @@ fun VisitFormScreen(
                             onUpdateSchoolInfo(
                                 it.copy(
                                     schoolName = schoolName,
-                                    referenceCode = udiseCode,
-                                    state = stateName,
-                                    district = district,
-                                    block = block,
+                                    stateName = stateName,
+                                    districtName = district,
+                                    blockName = block,
                                     principalName = principalName,
-                                    mobile = principalMobile
+                                    principalMobile = principalMobile
                                 )
                             )
                         }

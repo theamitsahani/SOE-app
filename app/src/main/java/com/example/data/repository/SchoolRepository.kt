@@ -18,67 +18,67 @@ class SchoolRepository(private val context: Context) {
             School(
                 schoolId = "sch_001",
                 sr = "1",
-                district = "JAIPUR",
+                stateName = "Rajasthan",
+                districtName = "JAIPUR",
                 schoolName = "Government Senior Secondary School (8788688)",
-                referenceCode = "8788688",
-                type = "Senior Secondary",
-                village = "Sanganer",
+                schoolType = "Senior Secondary",
+                villageName = "Sanganer",
                 principalName = "Rajesh Sharma",
-                block = "SANGANER",
-                mobile = "9829012345",
-                originalVisitDate = "05-Aug-2026"
+                blockName = "SANGANER",
+                principalMobile = "9829012345",
+                visitDate = "05-Aug-2026"
             ),
             School(
                 schoolId = "sch_002",
                 sr = "2",
-                district = "JAIPUR",
+                stateName = "Rajasthan",
+                districtName = "JAIPUR",
                 schoolName = "Government Mahatma Gandhi English Medium School (9123842)",
-                referenceCode = "9123842",
-                type = "Secondary",
-                village = "Amer",
+                schoolType = "Secondary",
+                villageName = "Amer",
                 principalName = "Sunita Verma",
-                block = "AMER",
-                mobile = "9414056789",
-                originalVisitDate = "08-Aug-2026"
+                blockName = "AMER",
+                principalMobile = "9414056789",
+                visitDate = "08-Aug-2026"
             ),
             School(
                 schoolId = "sch_003",
                 sr = "3",
-                district = "JODHPUR",
+                stateName = "Rajasthan",
+                districtName = "JODHPUR",
                 schoolName = "Govt Secondary School Soorsagar (7612349)",
-                referenceCode = "7612349",
-                type = "Secondary",
-                village = "Soorsagar",
+                schoolType = "Secondary",
+                villageName = "Soorsagar",
                 principalName = "Mahesh Choudhary",
-                block = "JODHPUR URBAN",
-                mobile = "9828112233",
-                originalVisitDate = "10-Aug-2026"
+                blockName = "JODHPUR URBAN",
+                principalMobile = "9828112233",
+                visitDate = "10-Aug-2026"
             ),
             School(
                 schoolId = "sch_004",
                 sr = "4",
-                district = "UDAIPUR",
+                stateName = "Rajasthan",
+                districtName = "UDAIPUR",
                 schoolName = "Government Higher Secondary School Girwa (6541298)",
-                referenceCode = "6541298",
-                type = "Senior Secondary",
-                village = "Girwa",
+                schoolType = "Senior Secondary",
+                villageName = "Girwa",
                 principalName = "Anita Rathore",
-                block = "GIRWA",
-                mobile = "9785123456",
-                originalVisitDate = "12-Aug-2026"
+                blockName = "GIRWA",
+                principalMobile = "9785123456",
+                visitDate = "12-Aug-2026"
             ),
             School(
                 schoolId = "sch_005",
                 sr = "5",
-                district = "KOTA",
+                stateName = "Rajasthan",
+                districtName = "KOTA",
                 schoolName = "Govt Model School Ladpura (5432187)",
-                referenceCode = "5432187",
-                type = "Model School",
-                village = "Ladpura",
+                schoolType = "Model School",
+                villageName = "Ladpura",
                 principalName = "Vikram Singh",
-                block = "LADPURA",
-                mobile = "9413234567",
-                originalVisitDate = "15-Aug-2026"
+                blockName = "LADPURA",
+                principalMobile = "9413234567",
+                visitDate = "15-Aug-2026"
             )
         )
 
@@ -106,16 +106,16 @@ class SchoolRepository(private val context: Context) {
                 firestore?.collection("schools")?.document(sch.schoolId)?.set(
                     mapOf(
                         "schoolId" to sch.schoolId,
-                        "sr" to sch.sr,
-                        "district" to sch.district,
+                        "stateName" to sch.stateName,
+                        "districtName" to sch.districtName,
                         "schoolName" to sch.schoolName,
-                        "referenceCode" to sch.referenceCode,
-                        "type" to sch.type,
-                        "village" to sch.village,
+                        "schoolType" to sch.schoolType,
+                        "villageName" to sch.villageName,
                         "principalName" to sch.principalName,
-                        "block" to sch.block,
-                        "mobile" to sch.mobile,
-                        "originalVisitDate" to sch.originalVisitDate,
+                        "blockName" to sch.blockName,
+                        "principalMobile" to sch.principalMobile,
+                        "visitDate" to sch.visitDate,
+                        "sr" to sch.sr,
                         "updatedAt" to System.currentTimeMillis()
                     )
                 )
@@ -137,14 +137,18 @@ class SchoolRepository(private val context: Context) {
             db.schoolDao().updateSchool(updated)
 
             // Sync update to Firestore
-            firestore?.collection("schools")?.document(school.schoolId)?.update(
+            firestore?.collection("schools")?.document(school.schoolId)?.set(
                 mapOf(
+                    "schoolId" to updated.schoolId,
+                    "stateName" to updated.stateName,
+                    "districtName" to updated.districtName,
                     "schoolName" to updated.schoolName,
-                    "district" to updated.district,
-                    "block" to updated.block,
+                    "schoolType" to updated.schoolType,
+                    "villageName" to updated.villageName,
                     "principalName" to updated.principalName,
-                    "mobile" to updated.mobile,
-                    "referenceCode" to updated.referenceCode,
+                    "blockName" to updated.blockName,
+                    "principalMobile" to updated.principalMobile,
+                    "visitDate" to updated.visitDate,
                     "updatedAt" to updated.updatedAt
                 )
             )

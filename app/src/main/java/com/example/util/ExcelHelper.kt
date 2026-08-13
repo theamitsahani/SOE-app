@@ -102,7 +102,6 @@ object ExcelHelper {
             }
 
             val existingNames = existingSchools.map { cleanText(it.schoolName).lowercase() }.toSet()
-            val existingRefCodes = existingSchools.map { cleanText(it.referenceCode) }.filter { it.isNotEmpty() }.toSet()
 
             // Skip row 0 (1st row is header). Process starting strictly from index 1 (2nd row).
             for (i in 1 until parsedRows.size) {
@@ -115,33 +114,25 @@ object ExcelHelper {
                     return if (idx >= 0 && idx < row.size) cleanText(row[idx]) else ""
                 }
 
-                val state = getCol(0)         // Column A
-                val district = getCol(1)      // Column B
-                val rawSchoolName = getCol(2) // Column C
-                val type = getCol(3)          // Column D
-                val village = getCol(4)       // Column E
-                val principal = getCol(5)     // Column F
-                val block = getCol(6)         // Column G
-                val mobile = getCol(7)        // Column H
-                val visitDate = getCol(8)     // Column I
-                val statusStr = getCol(9)     // Column J
+                val stateName = getCol(0)         // Column A: State Name
+                val districtName = getCol(1)      // Column B: District Name
+                val schoolName = getCol(2)        // Column C: School Name (Required)
+                val schoolType = getCol(3)        // Column D: School Type
+                val villageName = getCol(4)       // Column E: Village Name
+                val principalName = getCol(5)     // Column F: Principal Name
+                val blockName = getCol(6)         // Column G: Block Name
+                val principalMobile = getCol(7)   // Column H: Principal Mobile Number
+                val visitDate = getCol(8)         // Column I: Visit Date
+                val statusStr = getCol(9).ifBlank { getCol(6) } // Status string if present
 
                 // RULE: ONLY if Column C (school name) is empty, consider row INVALID
-                if (rawSchoolName.isBlank()) {
+                if (schoolName.isBlank()) {
                     invalidRows++
                     errors.add("Row ${i + 1}: Column C (School Name) is empty")
                     continue
                 }
 
-                // Extract reference code from brackets if present e.g. "GSSS School (8788688)"
-                val bracketRegex = Regex("""\(([^)]+)\)""")
-                val match = bracketRegex.find(rawSchoolName)
-                val referenceCode = match?.groupValues?.get(1)?.trim() ?: ""
-                val schoolNameClean = rawSchoolName.trim()
-
-                val isDuplicate = existingNames.contains(schoolNameClean.lowercase()) ||
-                        (referenceCode.isNotEmpty() && existingRefCodes.contains(referenceCode))
-
+                val isDuplicate = existingNames.contains(schoolName.lowercase())
                 if (isDuplicate) {
                     duplicateRows++
                 }
@@ -150,16 +141,15 @@ object ExcelHelper {
 
                 val school = School(
                     schoolId = schoolId,
-                    state = state.ifBlank { "Rajasthan" },
-                    district = district.ifBlank { "Rajasthan" },
-                    schoolName = schoolNameClean,
-                    referenceCode = referenceCode,
-                    type = type,
-                    village = village,
-                    principalName = principal,
-                    block = block,
-                    mobile = mobile,
-                    originalVisitDate = visitDate,
+                    stateName = stateName.ifBlank { "Rajasthan" },
+                    districtName = districtName,
+                    schoolName = schoolName, // Exact school name as provided, preserving brackets/numbers
+                    schoolType = schoolType,
+                    villageName = villageName,
+                    principalName = principalName,
+                    blockName = blockName,
+                    principalMobile = principalMobile,
+                    visitDate = visitDate,
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis()
                 )
@@ -167,23 +157,22 @@ object ExcelHelper {
                 schools.add(school)
                 validRows++
 
-                // RULE: If Column J or Column G or status string is "TRUE"/"True"/"1"/"YES"/"COMPLETED" -> mark as Completed Visit
+                // Check completed visit status
                 val isCompleted = statusStr.equals("TRUE", ignoreCase = true) ||
                         statusStr.equals("1") ||
                         statusStr.equals("YES", ignoreCase = true) ||
-                        statusStr.equals("COMPLETED", ignoreCase = true) ||
-                        block.equals("TRUE", ignoreCase = true)
+                        statusStr.equals("COMPLETED", ignoreCase = true)
 
                 if (isCompleted) {
                     val answers = com.example.data.model.VisitAnswers(
                         q1_soeName = "Excel Import System",
                         q2_visitDate = visitDate.ifBlank { "Imported" },
-                        q3_schoolName = schoolNameClean,
-                        q4_udiseCode = referenceCode,
-                        q5_district = district,
-                        q6_block = block,
-                        q7_principalName = principal,
-                        q8_principalMobile = mobile,
+                        q3_schoolName = schoolName,
+                        q4_udiseCode = "",
+                        q5_district = districtName,
+                        q6_block = blockName,
+                        q7_principalName = principalName,
+                        q8_principalMobile = principalMobile,
                         q9_metPrincipal = "हाँ",
                         q10_missionGyanAwareness = "हाँ",
                         q11_studentCount = "Verified",
@@ -198,9 +187,9 @@ object ExcelHelper {
                         schoolId = schoolId,
                         employeeId = "emp_system",
                         employeeName = "System (Excel Import)",
-                        schoolName = schoolNameClean,
-                        district = district,
-                        block = block,
+                        schoolName = schoolName,
+                        district = districtName,
+                        block = blockName,
                         visitDate = visitDate.ifBlank { "Imported" },
                         status = com.example.data.model.VisitStatus.SUBMITTED,
                         answersJson = answersAdapter.toJson(answers),
@@ -227,15 +216,11 @@ object ExcelHelper {
     }
 
     /**
-     * Sanitizes strings to prevent garbled unicode replacement characters or binary control chars.
+     * Sanitizes strings while preserving Unicode Hindi Devanagari text intact.
      */
     private fun cleanText(input: String): String {
         if (input.isBlank()) return ""
-        var cleaned = input.replace("\uFEFF", "") // strip BOM
-            .replace("\uFFFD", "")                 // strip unicode replacement character diamond
-            .replace(Regex("""[\x00-\x08\x0B\x0C\x0E-\x1F]"""), "") // strip control characters
-            .trim()
-        return cleaned
+        return input.replace("\uFEFF", "").trim()
     }
 
     private fun isXlsxZip(bytes: ByteArray): Boolean {
@@ -247,117 +232,140 @@ object ExcelHelper {
     }
 
     /**
-     * Native parser for Excel .xlsx ZIP archive using ZipInputStream + XmlPullParser.
+     * Native parser for Excel .xlsx ZIP archive using in-memory entry reading + XmlPullParser.
      */
     private fun readXlsxRows(bytes: ByteArray): List<List<String>> {
-        val sharedStrings = mutableListOf<String>()
-        val sheetRows = mutableMapOf<Int, MutableMap<Int, String>>()
+        var sharedStringsXml: String? = null
+        var sheetXml: String? = null
 
-        // Step 1: Extract sharedStrings.xml
         try {
-            val zis = ZipInputStream(ByteArrayInputStream(bytes))
-            var entry = zis.nextEntry
-            while (entry != null) {
-                if (entry.name.endsWith("sharedStrings.xml")) {
-                    val factory = XmlPullParserFactory.newInstance()
-                    factory.isNamespaceAware = true
-                    val parser = factory.newPullParser()
-                    parser.setInput(zis, "UTF-8")
-                    var eventType = parser.eventType
-                    var inText = false
-                    val currentSb = StringBuilder()
-
-                    while (eventType != XmlPullParser.END_DOCUMENT) {
-                        when (eventType) {
-                            XmlPullParser.START_TAG -> {
-                                if (parser.name == "t") inText = true
-                            }
-                            XmlPullParser.TEXT -> {
-                                if (inText) currentSb.append(parser.text)
-                            }
-                            XmlPullParser.END_TAG -> {
-                                if (parser.name == "t") inText = false
-                                else if (parser.name == "si") {
-                                    sharedStrings.add(currentSb.toString().trim())
-                                    currentSb.clear()
-                                }
-                            }
-                        }
-                        eventType = parser.next()
+            ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    val name = entry.name.lowercase()
+                    if (name.endsWith("sharedstrings.xml")) {
+                        sharedStringsXml = String(zis.readBytes(), Charsets.UTF_8)
+                    } else if (name.contains("worksheets/sheet1.xml") || (sheetXml == null && name.contains("worksheets/sheet"))) {
+                        sheetXml = String(zis.readBytes(), Charsets.UTF_8)
                     }
-                    break
+                    entry = zis.nextEntry
                 }
-                entry = zis.nextEntry
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        // Step 2: Extract sheet1.xml (or first worksheet)
-        try {
-            val zis = ZipInputStream(ByteArrayInputStream(bytes))
-            var entry = zis.nextEntry
-            while (entry != null) {
-                if (entry.name.contains("worksheets/sheet")) {
-                    val factory = XmlPullParserFactory.newInstance()
-                    factory.isNamespaceAware = true
-                    val parser = factory.newPullParser()
-                    parser.setInput(zis, "UTF-8")
+        val sharedStrings = mutableListOf<String>()
+        if (!sharedStringsXml.isNullOrEmpty()) {
+            try {
+                val factory = XmlPullParserFactory.newInstance()
+                factory.isNamespaceAware = false
+                val parser = factory.newPullParser()
+                parser.setInput(java.io.StringReader(sharedStringsXml))
 
-                    var eventType = parser.eventType
-                    var currentRowIdx = -1
-                    var currentColIdx = -1
-                    var cellType = ""
-                    val cellValue = StringBuilder()
+                var eventType = parser.eventType
+                var inTextTag = false
+                val currentSb = StringBuilder()
 
-                    while (eventType != XmlPullParser.END_DOCUMENT) {
-                        when (eventType) {
-                            XmlPullParser.START_TAG -> {
-                                if (parser.name == "row") {
-                                    val rAttr = parser.getAttributeValue(null, "r")
-                                    currentRowIdx = (rAttr?.toIntOrNull() ?: (currentRowIdx + 2)) - 1
-                                    if (!sheetRows.containsKey(currentRowIdx)) {
-                                        sheetRows[currentRowIdx] = mutableMapOf()
-                                    }
-                                } else if (parser.name == "c") {
-                                    val rRef = parser.getAttributeValue(null, "r")
-                                    cellType = parser.getAttributeValue(null, "t") ?: ""
-                                    if (rRef != null) {
-                                        currentColIdx = colRefToIndex(rRef)
-                                    } else {
-                                        currentColIdx++
-                                    }
-                                    cellValue.clear()
+                while (eventType != XmlPullParser.END_DOCUMENT) {
+                    val tagName = parser.name ?: ""
+                    when (eventType) {
+                        XmlPullParser.START_TAG -> {
+                            if (tagName.equals("si", ignoreCase = true)) {
+                                currentSb.clear()
+                            } else if (tagName.equals("t", ignoreCase = true)) {
+                                inTextTag = true
+                            }
+                        }
+                        XmlPullParser.TEXT -> {
+                            if (inTextTag) {
+                                currentSb.append(parser.text)
+                            }
+                        }
+                        XmlPullParser.END_TAG -> {
+                            if (tagName.equals("t", ignoreCase = true)) {
+                                inTextTag = false
+                            } else if (tagName.equals("si", ignoreCase = true)) {
+                                sharedStrings.add(currentSb.toString())
+                                currentSb.clear()
+                            }
+                        }
+                    }
+                    eventType = parser.next()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        val sheetRows = mutableMapOf<Int, MutableMap<Int, String>>()
+        if (!sheetXml.isNullOrEmpty()) {
+            try {
+                val factory = XmlPullParserFactory.newInstance()
+                factory.isNamespaceAware = false
+                val parser = factory.newPullParser()
+                parser.setInput(java.io.StringReader(sheetXml))
+
+                var eventType = parser.eventType
+                var currentRowIdx = -1
+                var currentColIdx = -1
+                var cellType = ""
+                var inValueTag = false
+                var inInlineTextTag = false
+                val cellValueSb = StringBuilder()
+
+                while (eventType != XmlPullParser.END_DOCUMENT) {
+                    val tagName = parser.name ?: ""
+                    when (eventType) {
+                        XmlPullParser.START_TAG -> {
+                            if (tagName.equals("row", ignoreCase = true)) {
+                                val rAttr = parser.getAttributeValue(null, "r")
+                                currentRowIdx = (rAttr?.toIntOrNull() ?: (currentRowIdx + 2)) - 1
+                                if (!sheetRows.containsKey(currentRowIdx)) {
+                                    sheetRows[currentRowIdx] = mutableMapOf()
                                 }
+                            } else if (tagName.equals("c", ignoreCase = true)) {
+                                val rRef = parser.getAttributeValue(null, "r")
+                                cellType = parser.getAttributeValue(null, "t") ?: ""
+                                currentColIdx = if (!rRef.isNullOrBlank()) colRefToIndex(rRef) else (currentColIdx + 1)
+                                cellValueSb.clear()
+                            } else if (tagName.equals("v", ignoreCase = true)) {
+                                inValueTag = true
+                            } else if (tagName.equals("t", ignoreCase = true)) {
+                                inInlineTextTag = true
                             }
-                            XmlPullParser.TEXT -> {
-                                cellValue.append(parser.text)
+                        }
+                        XmlPullParser.TEXT -> {
+                            if (inValueTag || inInlineTextTag) {
+                                cellValueSb.append(parser.text)
                             }
-                            XmlPullParser.END_TAG -> {
-                                if (parser.name == "c") {
-                                    val rawVal = cellValue.toString().trim()
-                                    var finalVal = rawVal
-                                    if (cellType == "s") {
-                                        val idx = rawVal.toIntOrNull()
-                                        if (idx != null && idx in sharedStrings.indices) {
-                                            finalVal = sharedStrings[idx]
-                                        }
+                        }
+                        XmlPullParser.END_TAG -> {
+                            if (tagName.equals("v", ignoreCase = true)) {
+                                inValueTag = false
+                            } else if (tagName.equals("t", ignoreCase = true)) {
+                                inInlineTextTag = false
+                            } else if (tagName.equals("c", ignoreCase = true)) {
+                                val rawVal = cellValueSb.toString().trim()
+                                var finalVal = rawVal
+                                if (cellType.equals("s", ignoreCase = true)) {
+                                    val idx = rawVal.toIntOrNull()
+                                    if (idx != null && idx in sharedStrings.indices) {
+                                        finalVal = sharedStrings[idx]
                                     }
-                                    if (currentRowIdx >= 0 && currentColIdx >= 0) {
-                                        val rowMap = sheetRows.getOrPut(currentRowIdx) { mutableMapOf() }
-                                        rowMap[currentColIdx] = finalVal
-                                    }
+                                }
+                                if (currentRowIdx >= 0 && currentColIdx >= 0) {
+                                    val rowMap = sheetRows.getOrPut(currentRowIdx) { mutableMapOf() }
+                                    rowMap[currentColIdx] = finalVal
                                 }
                             }
                         }
-                        eventType = parser.next()
                     }
-                    break
+                    eventType = parser.next()
                 }
-                entry = zis.nextEntry
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
 
         if (sheetRows.isEmpty()) return emptyList()
@@ -390,18 +398,23 @@ object ExcelHelper {
     }
 
     /**
-     * Reads CSV content handling UTF-8, UTF-8 BOM, UTF-16, and Windows-1252 encodings.
+     * Reads CSV content handling UTF-8, UTF-8 BOM, and UTF-16 encodings.
      */
     private fun readCsvRows(bytes: ByteArray): List<List<String>> {
-        var text = String(bytes, Charsets.UTF_8)
-        if (text.contains("\uFFFD")) {
-            // Try Windows-1252 or UTF-16 if UTF-8 resulted in invalid chars
-            val textW1252 = String(bytes, charset("Windows-1252"))
-            if (!textW1252.contains("\uFFFD")) {
-                text = textW1252
+        val text = when {
+            bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte() -> {
+                String(bytes, 3, bytes.size - 3, Charsets.UTF_8)
+            }
+            bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte() -> {
+                String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+            }
+            bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte() -> {
+                String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+            }
+            else -> {
+                String(bytes, Charsets.UTF_8)
             }
         }
-        text = text.replace("\uFEFF", "") // remove BOM
 
         val lines = text.lines()
         val result = mutableListOf<List<String>>()

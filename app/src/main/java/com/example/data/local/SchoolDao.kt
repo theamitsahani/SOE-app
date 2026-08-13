@@ -16,7 +16,7 @@ interface SchoolDao {
     @Query("SELECT * FROM schools WHERE schoolId = :schoolId LIMIT 1")
     suspend fun getSchoolById(schoolId: String): School?
 
-    @Query("SELECT * FROM schools WHERE schoolName LIKE '%' || :query || '%' OR referenceCode LIKE '%' || :query || '%' OR district LIKE '%' || :query || '%' OR block LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM schools WHERE schoolName LIKE '%' || :query || '%' OR districtName LIKE '%' || :query || '%' OR blockName LIKE '%' || :query || '%' OR villageName LIKE '%' || :query || '%' OR principalName LIKE '%' || :query || '%'")
     fun searchSchools(query: String): Flow<List<School>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
