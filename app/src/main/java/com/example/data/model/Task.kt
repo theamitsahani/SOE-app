@@ -11,6 +11,7 @@ data class Task(
     val employeeId: String,
     val employeeName: String = "",
     val schoolName: String = "",
+    val state: String = "Rajasthan",
     val district: String = "",
     val block: String = "",
     val assignedBy: String = "Admin",

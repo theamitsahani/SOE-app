@@ -62,6 +62,9 @@ data class PhotoGridItem(
     val url: String,
     val categoryName: String,
     val schoolName: String,
+    val state: String,
+    val district: String,
+    val block: String,
     val date: String
 )
 
@@ -70,9 +73,17 @@ data class PhotoGridItem(
 fun PhotoGalleryTab(
     visits: List<Visit>
 ) {
+    var selectedState by remember { mutableStateOf("All States") }
+    var selectedDistrict by remember { mutableStateOf("All Districts") }
+    var selectedBlock by remember { mutableStateOf("All Blocks") }
     var selectedSchoolName by remember { mutableStateOf("All Schools") }
     var selectedCategory by remember { mutableStateOf("All Categories") }
-    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    var stateExpanded by remember { mutableStateOf(false) }
+    var districtExpanded by remember { mutableStateOf(false) }
+    var blockExpanded by remember { mutableStateOf(false) }
+    var schoolExpanded by remember { mutableStateOf(false) }
+    var categoryExpanded by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
@@ -92,6 +103,9 @@ fun PhotoGalleryTab(
                                 url = u,
                                 categoryName = catObj.displayName,
                                 schoolName = v.schoolName,
+                                state = if (v.state.isNotBlank()) v.state else "Rajasthan",
+                                district = v.district,
+                                block = v.block,
                                 date = v.visitDate
                             )
                         )
@@ -102,14 +116,43 @@ fun PhotoGalleryTab(
         list
     }
 
-    val schoolNamesList = remember(allPhotos) {
-        listOf("All Schools") + allPhotos.map { it.schoolName }.distinct()
+    val stateList = remember(allPhotos) {
+        listOf("All States") + allPhotos.map { it.state }.filter { it.isNotBlank() }.distinct()
     }
 
-    val filteredPhotos = remember(allPhotos, selectedSchoolName, selectedCategory) {
+    val districtList = remember(allPhotos, selectedState) {
+        val base = if (selectedState == "All States") allPhotos else allPhotos.filter { it.state == selectedState }
+        listOf("All Districts") + base.map { it.district }.filter { it.isNotBlank() }.distinct()
+    }
+
+    val blockList = remember(allPhotos, selectedState, selectedDistrict) {
+        val base = allPhotos.filter {
+            (selectedState == "All States" || it.state == selectedState) &&
+            (selectedDistrict == "All Districts" || it.district == selectedDistrict)
+        }
+        listOf("All Blocks") + base.map { it.block }.filter { it.isNotBlank() }.distinct()
+    }
+
+    val schoolNamesList = remember(allPhotos, selectedState, selectedDistrict, selectedBlock) {
+        val base = allPhotos.filter {
+            (selectedState == "All States" || it.state == selectedState) &&
+            (selectedDistrict == "All Districts" || it.district == selectedDistrict) &&
+            (selectedBlock == "All Blocks" || it.block == selectedBlock)
+        }
+        listOf("All Schools") + base.map { it.schoolName }.distinct()
+    }
+
+    val categoryList = remember {
+        listOf("All Categories") + PhotoCategory.entries.map { it.displayName }
+    }
+
+    val filteredPhotos = remember(allPhotos, selectedState, selectedDistrict, selectedBlock, selectedSchoolName, selectedCategory) {
         allPhotos.filter {
+            (selectedState == "All States" || it.state == selectedState) &&
+            (selectedDistrict == "All Districts" || it.district == selectedDistrict) &&
+            (selectedBlock == "All Blocks" || it.block == selectedBlock) &&
             (selectedSchoolName == "All Schools" || it.schoolName == selectedSchoolName) &&
-                    (selectedCategory == "All Categories" || it.categoryName == selectedCategory)
+            (selectedCategory == "All Categories" || it.categoryName == selectedCategory)
         }
     }
 
@@ -145,34 +188,183 @@ fun PhotoGalleryTab(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // School Filter Dropdown
-        ExposedDropdownMenuBox(
-            expanded = dropdownExpanded,
-            onExpandedChange = { dropdownExpanded = !dropdownExpanded }
+        // 1. Location Filters: State, District, Block
+        Text("1. Location Category Filters (स्थान फ़िल्टर)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedTextField(
-                value = selectedSchoolName,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Filter by School") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = dropdownExpanded,
-                onDismissRequest = { dropdownExpanded = false }
+            // State Dropdown
+            ExposedDropdownMenuBox(
+                expanded = stateExpanded,
+                onExpandedChange = { stateExpanded = !stateExpanded },
+                modifier = Modifier.weight(1f)
             ) {
-                schoolNamesList.forEach { sName ->
-                    DropdownMenuItem(
-                        text = { Text(sName, fontSize = 13.sp) },
-                        onClick = {
-                            selectedSchoolName = sName
-                            dropdownExpanded = false
-                        }
-                    )
+                OutlinedTextField(
+                    value = selectedState,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("State", fontSize = 11.sp) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = stateExpanded,
+                    onDismissRequest = { stateExpanded = false }
+                ) {
+                    stateList.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item, fontSize = 12.sp) },
+                            onClick = {
+                                selectedState = item
+                                selectedDistrict = "All Districts"
+                                selectedBlock = "All Blocks"
+                                selectedSchoolName = "All Schools"
+                                stateExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // District Dropdown
+            ExposedDropdownMenuBox(
+                expanded = districtExpanded,
+                onExpandedChange = { districtExpanded = !districtExpanded },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = selectedDistrict,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("District", fontSize = 11.sp) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = districtExpanded) },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = districtExpanded,
+                    onDismissRequest = { districtExpanded = false }
+                ) {
+                    districtList.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item, fontSize = 12.sp) },
+                            onClick = {
+                                selectedDistrict = item
+                                selectedBlock = "All Blocks"
+                                selectedSchoolName = "All Schools"
+                                districtExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Block Dropdown
+            ExposedDropdownMenuBox(
+                expanded = blockExpanded,
+                onExpandedChange = { blockExpanded = !blockExpanded },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = selectedBlock,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Block", fontSize = 11.sp) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = blockExpanded) },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = blockExpanded,
+                    onDismissRequest = { blockExpanded = false }
+                ) {
+                    blockList.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item, fontSize = 12.sp) },
+                            onClick = {
+                                selectedBlock = item
+                                selectedSchoolName = "All Schools"
+                                blockExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // 2. Photo Style & School Category Filters
+        Text("2. Photo Style & School Category Filters (फोटो स्टाइल एवं स्कूल फ़िल्टर)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Photo Style / Category Dropdown
+            ExposedDropdownMenuBox(
+                expanded = categoryExpanded,
+                onExpandedChange = { categoryExpanded = !categoryExpanded },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = selectedCategory,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Photo Style / Category", fontSize = 11.sp) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = categoryExpanded,
+                    onDismissRequest = { categoryExpanded = false }
+                ) {
+                    categoryList.forEach { cName ->
+                        DropdownMenuItem(
+                            text = { Text(cName, fontSize = 12.sp) },
+                            onClick = {
+                                selectedCategory = cName
+                                categoryExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // School Filter Dropdown
+            ExposedDropdownMenuBox(
+                expanded = schoolExpanded,
+                onExpandedChange = { schoolExpanded = !schoolExpanded },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = selectedSchoolName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Filter by School", fontSize = 11.sp) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = schoolExpanded) },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = schoolExpanded,
+                    onDismissRequest = { schoolExpanded = false }
+                ) {
+                    schoolNamesList.forEach { sName ->
+                        DropdownMenuItem(
+                            text = { Text(sName, fontSize = 12.sp) },
+                            onClick = {
+                                selectedSchoolName = sName
+                                schoolExpanded = false
+                            }
+                        )
+                    }
                 }
             }
         }

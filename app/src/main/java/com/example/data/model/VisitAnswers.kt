@@ -23,5 +23,7 @@ data class VisitAnswers(
     val q17_problemsOrAssistance: String = "",
     val q18_followupRequired: String = "नहीं", // हाँ, नहीं
     val q20_finalRemarks: String = "",
-    val q21_smartClassStatus: String = "बहुत अच्छी" // बहुत अच्छी, अच्छी, सामान्य, खराब, उपयोग में नहीं है, स्मार्ट क्लास उपलब्ध नहीं है
+    val q21_smartClassStatus: String = "बहुत अच्छी", // बहुत अच्छी, अच्छी, सामान्य, खराब, उपयोग में नहीं है, स्मार्ट क्लास उपलब्ध नहीं है
+    val q22_participatingClasses: String = "", // e.g. "Class 6th, Class 7th, Class 8th"
+    val q23_state: String = "Rajasthan"
 )

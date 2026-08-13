@@ -84,11 +84,44 @@ fun AssignVisitsTab(
     var visitDate by remember { mutableStateOf("15-Aug-2026") }
     var notes by remember { mutableStateOf("") }
 
+    var selectedState by remember { mutableStateOf("All States") }
+    var selectedDistrict by remember { mutableStateOf("All Districts") }
+    var selectedBlock by remember { mutableStateOf("All Blocks") }
+
+    var stateExpanded by remember { mutableStateOf(false) }
+    var districtExpanded by remember { mutableStateOf(false) }
+    var blockExpanded by remember { mutableStateOf(false) }
     var schoolDropdownExpanded by remember { mutableStateOf(false) }
     var employeeDropdownExpanded by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var selectedVisitForDetails by remember { mutableStateOf<Visit?>(null) }
+
+    val stateList = remember(schools) {
+        listOf("All States") + schools.map { if (it.state.isNotBlank()) it.state else "Rajasthan" }.distinct()
+    }
+
+    val districtList = remember(schools, selectedState) {
+        val base = if (selectedState == "All States") schools else schools.filter { (it.state.ifBlank { "Rajasthan" }) == selectedState }
+        listOf("All Districts") + base.map { it.district }.filter { it.isNotBlank() }.distinct()
+    }
+
+    val blockList = remember(schools, selectedState, selectedDistrict) {
+        val base = schools.filter {
+            (selectedState == "All States" || (it.state.ifBlank { "Rajasthan" }) == selectedState) &&
+            (selectedDistrict == "All Districts" || it.district == selectedDistrict)
+        }
+        listOf("All Blocks") + base.map { it.block }.filter { it.isNotBlank() }.distinct()
+    }
+
+    val filteredSchools = remember(schools, selectedState, selectedDistrict, selectedBlock) {
+        schools.filter { school ->
+            val sState = school.state.ifBlank { "Rajasthan" }
+            (selectedState == "All States" || sState == selectedState) &&
+            (selectedDistrict == "All Districts" || school.district == selectedDistrict) &&
+            (selectedBlock == "All Blocks" || school.block == selectedBlock)
+        }
+    }
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Slate900,
@@ -124,6 +157,116 @@ fun AssignVisitsTab(
                         Text(message!!, color = Indigo600, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
+                    Text("Target Location Category (स्थान फ़िल्टर)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
+
+                    // State, District, Block Filter Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // State Dropdown
+                        ExposedDropdownMenuBox(
+                            expanded = stateExpanded,
+                            onExpandedChange = { stateExpanded = !stateExpanded },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            OutlinedTextField(
+                                value = selectedState,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("State", fontSize = 11.sp) },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = textFieldColors,
+                                modifier = Modifier.menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = stateExpanded,
+                                onDismissRequest = { stateExpanded = false }
+                            ) {
+                                stateList.forEach { s ->
+                                    DropdownMenuItem(
+                                        text = { Text(s, fontSize = 12.sp) },
+                                        onClick = {
+                                            selectedState = s
+                                            selectedDistrict = "All Districts"
+                                            selectedBlock = "All Blocks"
+                                            selectedSchool = null
+                                            stateExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // District Dropdown
+                        ExposedDropdownMenuBox(
+                            expanded = districtExpanded,
+                            onExpandedChange = { districtExpanded = !districtExpanded },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            OutlinedTextField(
+                                value = selectedDistrict,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("District", fontSize = 11.sp) },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = districtExpanded) },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = textFieldColors,
+                                modifier = Modifier.menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = districtExpanded,
+                                onDismissRequest = { districtExpanded = false }
+                            ) {
+                                districtList.forEach { d ->
+                                    DropdownMenuItem(
+                                        text = { Text(d, fontSize = 12.sp) },
+                                        onClick = {
+                                            selectedDistrict = d
+                                            selectedBlock = "All Blocks"
+                                            selectedSchool = null
+                                            districtExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Block Dropdown
+                        ExposedDropdownMenuBox(
+                            expanded = blockExpanded,
+                            onExpandedChange = { blockExpanded = !blockExpanded },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            OutlinedTextField(
+                                value = selectedBlock,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Block", fontSize = 11.sp) },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = blockExpanded) },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = textFieldColors,
+                                modifier = Modifier.menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = blockExpanded,
+                                onDismissRequest = { blockExpanded = false }
+                            ) {
+                                blockList.forEach { b ->
+                                    DropdownMenuItem(
+                                        text = { Text(b, fontSize = 12.sp) },
+                                        onClick = {
+                                            selectedBlock = b
+                                            selectedSchool = null
+                                            blockExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Select School Dropdown
                     ExposedDropdownMenuBox(
                         expanded = schoolDropdownExpanded,
@@ -133,7 +276,7 @@ fun AssignVisitsTab(
                             value = selectedSchool?.schoolName ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Select Target School") },
+                            label = { Text("Select Target School (${filteredSchools.size} available)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = schoolDropdownExpanded) },
                             shape = RoundedCornerShape(12.dp),
                             colors = textFieldColors,
@@ -145,9 +288,9 @@ fun AssignVisitsTab(
                             expanded = schoolDropdownExpanded,
                             onDismissRequest = { schoolDropdownExpanded = false }
                         ) {
-                            schools.forEach { school ->
+                            filteredSchools.forEach { school ->
                                 DropdownMenuItem(
-                                    text = { Text(school.schoolName, fontSize = 13.sp) },
+                                    text = { Text("${school.schoolName} (${school.block}, ${school.district})", fontSize = 13.sp) },
                                     onClick = {
                                         selectedSchool = school
                                         schoolDropdownExpanded = false

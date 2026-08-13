@@ -36,6 +36,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -104,12 +106,17 @@ fun VisitFormScreen(
 
     // School Details State
     var schoolName by remember { mutableStateOf(task?.schoolName ?: initialSchool?.schoolName ?: "") }
-    var referenceCode by remember { mutableStateOf(initialSchool?.referenceCode ?: "") }
+    var udiseCode by remember { mutableStateOf(initialSchool?.referenceCode ?: "08010100101") }
+    var stateName by remember { mutableStateOf(initialSchool?.state ?: "Rajasthan") }
     var district by remember { mutableStateOf(task?.district ?: initialSchool?.district ?: "") }
     var block by remember { mutableStateOf(task?.block ?: initialSchool?.block ?: "") }
     var principalName by remember { mutableStateOf(initialSchool?.principalName ?: "") }
     var principalMobile by remember { mutableStateOf(initialSchool?.mobile ?: "") }
     var visitDate by remember { mutableStateOf(task?.visitDate ?: "13-Aug-2026") }
+
+    // Participating Classes Checkboxes (Class 6th to 12th)
+    val availableClasses = remember { listOf("Class 6th", "Class 7th", "Class 8th", "Class 9th", "Class 10th", "Class 11th", "Class 12th") }
+    var selectedClasses by remember { mutableStateOf(setOf("Class 6th", "Class 7th", "Class 8th", "Class 9th", "Class 10th", "Class 11th", "Class 12th")) }
 
     // Questionnaire Answers
     var metPrincipal by remember { mutableStateOf("हाँ") }
@@ -249,7 +256,7 @@ fun VisitFormScreen(
 
                 when (currentStep) {
                     1 -> {
-                        // STEP 1: School Details
+                        // STEP 1: School Details & UDISE Code
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
@@ -272,12 +279,32 @@ fun VisitFormScreen(
                                 Spacer(modifier = Modifier.height(14.dp))
 
                                 DetailRow(label = "School Name", value = schoolName)
-                                DetailRow(label = "Reference Code", value = referenceCode.ifBlank { "Not specified" })
+                                DetailRow(label = "State", value = stateName)
                                 DetailRow(label = "District", value = district)
                                 DetailRow(label = "Block", value = block)
                                 DetailRow(label = "Principal Name", value = principalName.ifBlank { "Not specified" })
                                 DetailRow(label = "Principal Mobile", value = principalMobile.ifBlank { "Not specified" })
                                 DetailRow(label = "Visit Date", value = visitDate)
+                            }
+                        }
+
+                        // UDISE Code Input Field
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("UDISE Code (यू-डाइस कोड)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = udiseCode,
+                                    onValueChange = { udiseCode = it },
+                                    placeholder = { Text("Enter 11-digit UDISE Code (e.g. 08010100101)") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
 
@@ -291,13 +318,50 @@ fun VisitFormScreen(
                     }
 
                     2 -> {
-                        // STEP 2: App Awareness & Engagement
+                        // STEP 2: App Awareness, Attendance & Participating Classes
                         SingleChoiceQuestion(
                             question = "10. Mission Gyan App के बारे में जानकारी? (App Knowledge?)",
                             options = listOf("हाँ", "नहीं", "थोड़ी जानकारी थी"),
                             selectedOption = missionGyanAwareness,
                             onOptionSelected = { missionGyanAwareness = it }
                         )
+
+                        // Participating Classes Checkboxes (Class 6th to 12th)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("भाग लेने वाली कक्षाएं (Participating Classes 6th - 12th)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                                Text("जिन कक्षाओं ने कार्यक्रम/विज़िट में भाग लिया उन्हें चुनें:", fontSize = 12.sp, color = Slate500)
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                availableClasses.forEach { cls ->
+                                    val isChecked = selectedClasses.contains(cls)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                selectedClasses = if (isChecked) selectedClasses - cls else selectedClasses + cls
+                                            }
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = isChecked,
+                                            onCheckedChange = { checked ->
+                                                selectedClasses = if (checked == true) selectedClasses + cls else selectedClasses - cls
+                                            },
+                                            colors = CheckboxDefaults.colors(checkedColor = Indigo600)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(cls, fontSize = 14.sp, color = Slate700, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+                        }
 
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -555,7 +619,7 @@ fun VisitFormScreen(
                                     q1_soeName = employeeUser.name,
                                     q2_visitDate = visitDate,
                                     q3_schoolName = schoolName,
-                                    q4_udiseCode = referenceCode,
+                                    q4_udiseCode = udiseCode,
                                     q5_district = district,
                                     q6_block = block,
                                     q7_principalName = principalName,
@@ -571,7 +635,9 @@ fun VisitFormScreen(
                                     q17_problemsOrAssistance = problemsOrAssistance,
                                     q18_followupRequired = followupRequired,
                                     q20_finalRemarks = finalRemarks,
-                                    q21_smartClassStatus = smartClassStatus
+                                    q21_smartClassStatus = smartClassStatus,
+                                    q22_participatingClasses = selectedClasses.sorted().joinToString(", "),
+                                    q23_state = stateName
                                 )
 
                                 val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
@@ -588,6 +654,7 @@ fun VisitFormScreen(
                                     employeeId = employeeUser.userId,
                                     employeeName = employeeUser.name,
                                     schoolName = schoolName,
+                                    state = stateName,
                                     district = district,
                                     block = block,
                                     visitDate = visitDate,
@@ -645,9 +712,15 @@ fun VisitFormScreen(
                         singleLine = true
                     )
                     OutlinedTextField(
-                        value = referenceCode,
-                        onValueChange = { referenceCode = it },
-                        label = { Text("Reference Code") },
+                        value = udiseCode,
+                        onValueChange = { udiseCode = it },
+                        label = { Text("UDISE Code") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = stateName,
+                        onValueChange = { stateName = it },
+                        label = { Text("State") },
                         singleLine = true
                     )
                     OutlinedTextField(
@@ -684,7 +757,8 @@ fun VisitFormScreen(
                             onUpdateSchoolInfo(
                                 it.copy(
                                     schoolName = schoolName,
-                                    referenceCode = referenceCode,
+                                    referenceCode = udiseCode,
+                                    state = stateName,
                                     district = district,
                                     block = block,
                                     principalName = principalName,

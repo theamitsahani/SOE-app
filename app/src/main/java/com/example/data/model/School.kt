@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 data class School(
     @PrimaryKey val schoolId: String,
     val sr: String = "",
+    val state: String = "Rajasthan",
     val district: String = "",
     val schoolName: String = "",
     val referenceCode: String = "", // Bracketed number parsed or explicit reference

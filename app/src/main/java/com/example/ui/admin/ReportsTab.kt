@@ -25,8 +25,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,21 +58,53 @@ import com.example.util.ExcelHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsTab(
     visits: List<Visit>
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedState by remember { mutableStateOf("All States") }
+    var selectedDistrict by remember { mutableStateOf("All Districts") }
+    var selectedBlock by remember { mutableStateOf("All Blocks") }
+
+    var stateExpanded by remember { mutableStateOf(false) }
+    var districtExpanded by remember { mutableStateOf(false) }
+    var blockExpanded by remember { mutableStateOf(false) }
+
     var selectedVisitForDetails by remember { mutableStateOf<Visit?>(null) }
     val context = LocalContext.current
 
-    val filteredVisits = remember(visits, searchQuery) {
-        if (searchQuery.isBlank()) visits
-        else visits.filter {
-            it.schoolName.contains(searchQuery, ignoreCase = true) ||
-                    it.district.contains(searchQuery, ignoreCase = true) ||
-                    it.block.contains(searchQuery, ignoreCase = true) ||
-                    it.employeeName.contains(searchQuery, ignoreCase = true)
+    val stateList = remember(visits) {
+        listOf("All States") + visits.map { if (it.state.isNotBlank()) it.state else "Rajasthan" }.distinct()
+    }
+
+    val districtList = remember(visits, selectedState) {
+        val base = if (selectedState == "All States") visits else visits.filter { (it.state.ifBlank { "Rajasthan" }) == selectedState }
+        listOf("All Districts") + base.map { it.district }.filter { it.isNotBlank() }.distinct()
+    }
+
+    val blockList = remember(visits, selectedState, selectedDistrict) {
+        val base = visits.filter {
+            (selectedState == "All States" || (it.state.ifBlank { "Rajasthan" }) == selectedState) &&
+            (selectedDistrict == "All Districts" || it.district == selectedDistrict)
+        }
+        listOf("All Blocks") + base.map { it.block }.filter { it.isNotBlank() }.distinct()
+    }
+
+    val filteredVisits = remember(visits, searchQuery, selectedState, selectedDistrict, selectedBlock) {
+        visits.filter { v ->
+            val vState = v.state.ifBlank { "Rajasthan" }
+            val matchState = selectedState == "All States" || vState == selectedState
+            val matchDistrict = selectedDistrict == "All Districts" || v.district == selectedDistrict
+            val matchBlock = selectedBlock == "All Blocks" || v.block == selectedBlock
+            val matchQuery = searchQuery.isBlank() || (
+                v.schoolName.contains(searchQuery, ignoreCase = true) ||
+                v.district.contains(searchQuery, ignoreCase = true) ||
+                v.block.contains(searchQuery, ignoreCase = true) ||
+                v.employeeName.contains(searchQuery, ignoreCase = true)
+            )
+            matchState && matchDistrict && matchBlock && matchQuery
         }
     }
 
@@ -97,6 +134,109 @@ fun ReportsTab(
                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Export CSV", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // State Filter
+                ExposedDropdownMenuBox(
+                    expanded = stateExpanded,
+                    onExpandedChange = { stateExpanded = !stateExpanded },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = selectedState,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("State", fontSize = 11.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = stateExpanded,
+                        onDismissRequest = { stateExpanded = false }
+                    ) {
+                        stateList.forEach { s ->
+                            DropdownMenuItem(
+                                text = { Text(s, fontSize = 12.sp) },
+                                onClick = {
+                                    selectedState = s
+                                    selectedDistrict = "All Districts"
+                                    selectedBlock = "All Blocks"
+                                    stateExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // District Filter
+                ExposedDropdownMenuBox(
+                    expanded = districtExpanded,
+                    onExpandedChange = { districtExpanded = !districtExpanded },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = selectedDistrict,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("District", fontSize = 11.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = districtExpanded) },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = districtExpanded,
+                        onDismissRequest = { districtExpanded = false }
+                    ) {
+                        districtList.forEach { d ->
+                            DropdownMenuItem(
+                                text = { Text(d, fontSize = 12.sp) },
+                                onClick = {
+                                    selectedDistrict = d
+                                    selectedBlock = "All Blocks"
+                                    districtExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Block Filter
+                ExposedDropdownMenuBox(
+                    expanded = blockExpanded,
+                    onExpandedChange = { blockExpanded = !blockExpanded },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = selectedBlock,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Block", fontSize = 11.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = blockExpanded) },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = blockExpanded,
+                        onDismissRequest = { blockExpanded = false }
+                    ) {
+                        blockList.forEach { b ->
+                            DropdownMenuItem(
+                                text = { Text(b, fontSize = 12.sp) },
+                                onClick = {
+                                    selectedBlock = b
+                                    blockExpanded = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
