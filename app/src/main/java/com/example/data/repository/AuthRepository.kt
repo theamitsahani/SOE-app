@@ -57,7 +57,9 @@ class AuthRepository(private val context: Context) {
             val input = emailOrUserId.trim()
 
             // 1. Check local seed/cache match for quick offline/test login
-            val localUserEntity = db.userDao().getUserByEmail(input) ?: db.userDao().getUserById(input)
+            val localUserEntity = db.userDao().getUserByEmail(input) 
+                ?: db.userDao().getUserById(input) 
+                ?: db.userDao().getUserByMobile(input)
 
             if (localUserEntity != null) {
                 if (localUserEntity.status == UserStatus.INACTIVE.name) {
@@ -76,7 +78,7 @@ class AuthRepository(private val context: Context) {
             }
 
             // 2. Try Firebase Auth or demo account fallback
-            if ((input == "admin@missiongyan.org" || input == "admin") && password == "admin123") {
+            if ((input == "admin@missiongyan.org" || input == "admin" || input == "9876543210") && password == "admin123") {
                 val adminUser = User(
                     userId = "admin_001",
                     name = "Mission Gyan Admin",
@@ -87,7 +89,7 @@ class AuthRepository(private val context: Context) {
                 )
                 _currentUser.value = adminUser
                 return@withContext Result.success(adminUser)
-            } else if ((input == "employee@missiongyan.org" || input == "emp") && password == "emp123") {
+            } else if ((input == "employee@missiongyan.org" || input == "emp" || input == "9123456789") && password == "emp123") {
                 val empUser = User(
                     userId = "emp_001",
                     name = "Ramesh Kumar (SOE Field Officer)",

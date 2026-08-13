@@ -1,5 +1,6 @@
 package com.example.ui.admin
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -314,13 +315,29 @@ fun SchoolCardItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Principal: ${school.principalName.ifBlank { "N/A" }}", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Slate700)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Phone, contentDescription = null, tint = Slate500, modifier = Modifier.size(14.dp))
+                
+                val context = LocalContext.current
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable {
+                        if (school.mobile.isNotBlank() && school.mobile != "N/A") {
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${school.mobile}"))
+                            context.startActivity(intent)
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Phone, contentDescription = "Call Principal", tint = Indigo600, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(school.mobile.ifBlank { "N/A" }, fontSize = 12.sp, color = Slate700)
+                    Text(
+                        text = school.mobile.ifBlank { "N/A" },
+                        fontSize = 12.sp,
+                        color = if (school.mobile.isNotBlank() && school.mobile != "N/A") Indigo600 else Slate700,
+                        fontWeight = if (school.mobile.isNotBlank() && school.mobile != "N/A") FontWeight.Bold else FontWeight.Normal
+                    )
                 }
             }
         }

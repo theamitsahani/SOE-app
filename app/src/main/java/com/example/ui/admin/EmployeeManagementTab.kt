@@ -1,5 +1,8 @@
 package com.example.ui.admin
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -231,7 +234,17 @@ fun EmployeeCardItem(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(employee.email, fontSize = 12.sp, color = Slate500)
                 if (employee.mobile.isNotBlank()) {
-                    Text("Mobile: ${employee.mobile}", fontSize = 12.sp, color = Slate700)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${employee.mobile}"))
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text("Mobile: ${employee.mobile}", fontSize = 12.sp, color = com.example.ui.theme.Indigo600, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 

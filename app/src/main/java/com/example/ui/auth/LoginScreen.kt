@@ -127,11 +127,11 @@ fun LoginScreen(
                     )
                 }
 
-                // Email / User ID Input
+                // Email / Mobile / User ID Input
                 OutlinedTextField(
                     value = emailOrUserId,
                     onValueChange = { emailOrUserId = it },
-                    label = { Text("Email / User ID") },
+                    label = { Text("Email / Mobile Number / User ID") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Slate500) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
