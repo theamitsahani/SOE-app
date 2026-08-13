@@ -62,6 +62,7 @@ fun AdminDashboardTab(
     totalSchoolsCount: Int,
     totalEmployeesCount: Int,
     onNavigateTab: (AdminTab) -> Unit,
+    onNavigateTabWithFilter: (AdminTab, String) -> Unit = { tab, _ -> onNavigateTab(tab) },
     onVisitClick: (Visit) -> Unit
 ) {
     val completedCount = visits.count { it.status == VisitStatus.SUBMITTED || it.status == VisitStatus.REVIEWED }
@@ -77,7 +78,7 @@ fun AdminDashboardTab(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Visit Summary & Metrics",
+                    text = "Visit Summary & Metrics (टैप करके फ़िल्टर देखें)",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -93,6 +94,7 @@ fun AdminDashboardTab(
                         icon = Icons.Default.CheckCircle,
                         color = Emerald600,
                         bgColor = Emerald100,
+                        onClick = { onNavigateTabWithFilter(AdminTab.VISIT_REPORTS, "Completed") },
                         modifier = Modifier.weight(1f)
                     )
                     KpiCard(
@@ -101,6 +103,7 @@ fun AdminDashboardTab(
                         icon = Icons.Default.HourglassTop,
                         color = Amber600,
                         bgColor = Amber100,
+                        onClick = { onNavigateTabWithFilter(AdminTab.VISIT_REPORTS, "Pending") },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -115,6 +118,7 @@ fun AdminDashboardTab(
                         icon = Icons.Default.Warning,
                         color = Red600,
                         bgColor = Red100,
+                        onClick = { onNavigateTabWithFilter(AdminTab.VISIT_REPORTS, "Follow-up Required") },
                         modifier = Modifier.weight(1f)
                     )
                     KpiCard(
@@ -123,6 +127,7 @@ fun AdminDashboardTab(
                         icon = Icons.Default.School,
                         color = Indigo600,
                         bgColor = Color(0xFFE0E7FF),
+                        onClick = { onNavigateTabWithFilter(AdminTab.SCHOOLS, "") },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -240,12 +245,14 @@ fun KpiCard(
     icon: ImageVector,
     color: Color,
     bgColor: Color,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
+        modifier = if (onClick != null) modifier.clickable { onClick() } else modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier.padding(14.dp),

@@ -31,6 +31,9 @@ class AuthRepository(private val context: Context) {
             name = "Mission Gyan Admin",
             email = "admin@missiongyan.org",
             mobile = "9876543210",
+            state = "Rajasthan",
+            district = "Jaipur",
+            password = "admin123",
             role = UserRole.ADMIN.name,
             status = UserStatus.ACTIVE.name
         )
@@ -40,6 +43,9 @@ class AuthRepository(private val context: Context) {
             name = "Ramesh Kumar (SOE Field Officer)",
             email = "employee@missiongyan.org",
             mobile = "9123456789",
+            state = "Rajasthan",
+            district = "Jaipur",
+            password = "emp123",
             role = UserRole.EMPLOYEE.name,
             status = UserStatus.ACTIVE.name
         )
@@ -65,11 +71,17 @@ class AuthRepository(private val context: Context) {
                 if (localUserEntity.status == UserStatus.INACTIVE.name) {
                     return@withContext Result.failure(Exception("This account is inactive. Please contact Admin."))
                 }
+                if (localUserEntity.password.isNotBlank() && password != localUserEntity.password) {
+                    return@withContext Result.failure(Exception("Incorrect password for this account."))
+                }
                 val user = User(
                     userId = localUserEntity.userId,
                     name = localUserEntity.name,
                     email = localUserEntity.email,
                     mobile = localUserEntity.mobile,
+                    state = localUserEntity.state,
+                    district = localUserEntity.district,
+                    password = localUserEntity.password,
                     role = UserRole.valueOf(localUserEntity.role),
                     status = UserStatus.valueOf(localUserEntity.status)
                 )
@@ -177,6 +189,9 @@ class AuthRepository(private val context: Context) {
                     name = e.name,
                     email = e.email,
                     mobile = e.mobile,
+                    state = e.state,
+                    district = e.district,
+                    password = e.password,
                     role = try { UserRole.valueOf(e.role) } catch (_: Exception) { UserRole.EMPLOYEE },
                     status = try { UserStatus.valueOf(e.status) } catch (_: Exception) { UserStatus.ACTIVE }
                 )
@@ -191,6 +206,9 @@ class AuthRepository(private val context: Context) {
                 name = user.name,
                 email = user.email,
                 mobile = user.mobile,
+                state = user.state,
+                district = user.district,
+                password = user.password,
                 role = user.role.name,
                 status = user.status.name
             )
@@ -203,6 +221,9 @@ class AuthRepository(private val context: Context) {
                     "name" to user.name,
                     "email" to user.email,
                     "mobile" to user.mobile,
+                    "state" to user.state,
+                    "district" to user.district,
+                    "password" to user.password,
                     "role" to user.role.name,
                     "status" to user.status.name
                 )

@@ -17,6 +17,9 @@ data class UserEntity(
     val name: String,
     val email: String,
     val mobile: String = "",
+    val state: String = "Rajasthan",
+    val district: String = "",
+    val password: String = "",
     val role: String = UserRole.EMPLOYEE.name,
     val status: String = UserStatus.ACTIVE.name,
     val createdAt: Long = System.currentTimeMillis()

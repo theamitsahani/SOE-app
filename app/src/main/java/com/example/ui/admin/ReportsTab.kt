@@ -58,22 +58,29 @@ import com.example.util.ExcelHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
+import com.example.data.model.VisitStatus
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsTab(
-    visits: List<Visit>
+    visits: List<Visit>,
+    initialStatusFilter: String = "All Statuses"
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedStatus by remember { mutableStateOf(initialStatusFilter) }
     var selectedState by remember { mutableStateOf("All States") }
     var selectedDistrict by remember { mutableStateOf("All Districts") }
     var selectedBlock by remember { mutableStateOf("All Blocks") }
 
+    var statusExpanded by remember { mutableStateOf(false) }
     var stateExpanded by remember { mutableStateOf(false) }
     var districtExpanded by remember { mutableStateOf(false) }
     var blockExpanded by remember { mutableStateOf(false) }
 
     var selectedVisitForDetails by remember { mutableStateOf<Visit?>(null) }
     val context = LocalContext.current
+
+    val statusList = listOf("All Statuses", "Completed", "Pending", "Follow-up Required")
 
     val stateList = remember(visits) {
         listOf("All States") + visits.map { if (it.state.isNotBlank()) it.state else "Rajasthan" }.distinct()
@@ -92,19 +99,27 @@ fun ReportsTab(
         listOf("All Blocks") + base.map { it.block }.filter { it.isNotBlank() }.distinct()
     }
 
-    val filteredVisits = remember(visits, searchQuery, selectedState, selectedDistrict, selectedBlock) {
+    val filteredVisits = remember(visits, searchQuery, selectedStatus, selectedState, selectedDistrict, selectedBlock) {
         visits.filter { v ->
             val vState = v.state.ifBlank { "Rajasthan" }
             val matchState = selectedState == "All States" || vState == selectedState
             val matchDistrict = selectedDistrict == "All Districts" || v.district == selectedDistrict
             val matchBlock = selectedBlock == "All Blocks" || v.block == selectedBlock
+            
+            val matchStatus = when (selectedStatus) {
+                "Completed" -> v.status == VisitStatus.SUBMITTED || v.status == VisitStatus.REVIEWED
+                "Pending" -> v.status == VisitStatus.ASSIGNED || v.status == VisitStatus.STARTED
+                "Follow-up Required" -> v.answersJson.contains("\"q18_followupRequired\":\"हाँ\"")
+                else -> true
+            }
+
             val matchQuery = searchQuery.isBlank() || (
                 v.schoolName.contains(searchQuery, ignoreCase = true) ||
                 v.district.contains(searchQuery, ignoreCase = true) ||
                 v.block.contains(searchQuery, ignoreCase = true) ||
                 v.employeeName.contains(searchQuery, ignoreCase = true)
             )
-            matchState && matchDistrict && matchBlock && matchQuery
+            matchState && matchDistrict && matchBlock && matchStatus && matchQuery
         }
     }
 
@@ -139,42 +154,76 @@ fun ReportsTab(
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // State Filter
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Status Filter Dropdown
                 ExposedDropdownMenuBox(
-                    expanded = stateExpanded,
-                    onExpandedChange = { stateExpanded = !stateExpanded },
-                    modifier = Modifier.weight(1f)
+                    expanded = statusExpanded,
+                    onExpandedChange = { statusExpanded = !statusExpanded },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = selectedState,
+                        value = "Filter Status: $selectedStatus",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("State", fontSize = 11.sp) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                        label = { Text("Visit Status Filter", fontSize = 11.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.menuAnchor()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
                     )
                     ExposedDropdownMenu(
-                        expanded = stateExpanded,
-                        onDismissRequest = { stateExpanded = false }
+                        expanded = statusExpanded,
+                        onDismissRequest = { statusExpanded = false }
                     ) {
-                        stateList.forEach { s ->
+                        statusList.forEach { st ->
                             DropdownMenuItem(
-                                text = { Text(s, fontSize = 12.sp) },
+                                text = { Text(st, fontSize = 13.sp, fontWeight = if (selectedStatus == st) FontWeight.Bold else FontWeight.Normal) },
                                 onClick = {
-                                    selectedState = s
-                                    selectedDistrict = "All Districts"
-                                    selectedBlock = "All Blocks"
-                                    stateExpanded = false
+                                    selectedStatus = st
+                                    statusExpanded = false
                                 }
                             )
                         }
                     }
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // State Filter
+                    ExposedDropdownMenuBox(
+                        expanded = stateExpanded,
+                        onExpandedChange = { stateExpanded = !stateExpanded },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = selectedState,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("State", fontSize = 11.sp) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = stateExpanded,
+                            onDismissRequest = { stateExpanded = false }
+                        ) {
+                            stateList.forEach { s ->
+                                DropdownMenuItem(
+                                    text = { Text(s, fontSize = 12.sp) },
+                                    onClick = {
+                                        selectedState = s
+                                        selectedDistrict = "All Districts"
+                                        selectedBlock = "All Blocks"
+                                        stateExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
 
                 // District Filter
                 ExposedDropdownMenuBox(
@@ -239,6 +288,7 @@ fun ReportsTab(
                     }
                 }
             }
+        }
         }
 
         item {

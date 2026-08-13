@@ -136,6 +136,7 @@ class MainActivity : ComponentActivity() {
 
                                 is ScreenState.Admin -> {
                                     var selectedAdminTab by remember { mutableIntStateOf(0) }
+                                    var reportsStatusFilter by remember { mutableStateOf("All Statuses") }
 
                                     AdminMainScreen(
                                         adminUser = state.adminUser,
@@ -153,6 +154,12 @@ class MainActivity : ComponentActivity() {
                                                     totalSchoolsCount = schools.size,
                                                     totalEmployeesCount = employees.size,
                                                     onNavigateTab = { targetTab ->
+                                                        selectedAdminTab = targetTab.ordinal
+                                                    },
+                                                    onNavigateTabWithFilter = { targetTab, filter ->
+                                                        if (filter.isNotBlank()) {
+                                                            reportsStatusFilter = filter
+                                                        }
                                                         selectedAdminTab = targetTab.ordinal
                                                     },
                                                     onVisitClick = {
@@ -209,7 +216,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             }
                                             AdminTab.VISIT_REPORTS -> {
-                                                ReportsTab(visits = visits)
+                                                ReportsTab(visits = visits, initialStatusFilter = reportsStatusFilter)
                                             }
                                             AdminTab.PHOTO_GALLERY -> {
                                                 PhotoGalleryTab(visits = visits)
