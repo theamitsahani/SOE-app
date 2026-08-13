@@ -69,11 +69,12 @@ import com.example.util.ImportValidationResult
 @Composable
 fun SchoolManagementTab(
     schools: List<School>,
-    onImportSchools: (List<School>, (Result<Int>) -> Unit) -> Unit,
+    onImportSchools: (List<School>, List<com.example.data.model.Visit>, (Result<Int>) -> Unit) -> Unit,
     onUpdateSchool: (School) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedSchoolForEdit by remember { mutableStateOf<School?>(null) }
+    var showAddSchoolDialog by remember { mutableStateOf(false) }
     var importValidationResult by remember { mutableStateOf<ImportValidationResult?>(null) }
     var isImporting by remember { mutableStateOf(false) }
 
@@ -103,26 +104,39 @@ fun SchoolManagementTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Top Header with Import Excel Action
+        // Top Header with Actions (Manual Add + Import Excel)
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("School Directory", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy900)
-                    Text("Total: ${schools.size} schools enrolled", fontSize = 12.sp, color = Slate500)
-                }
-
-                Button(
-                    onClick = { filePickerLauncher.launch("*/*") },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Import Excel", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text("School Directory", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                        Text("Total: ${schools.size} schools enrolled", fontSize = 12.sp, color = Slate500)
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showAddSchoolDialog = true },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = Indigo600)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add School", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
+                        }
+
+                        Button(
+                            onClick = { filePickerLauncher.launch("*/*") },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
+                        ) {
+                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Import Excel", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -218,6 +232,137 @@ fun SchoolManagementTab(
         )
     }
 
+    // Manual Add School Dialog
+    if (showAddSchoolDialog) {
+        var mName by remember { mutableStateOf("") }
+        var mRefCode by remember { mutableStateOf("") }
+        var mState by remember { mutableStateOf("Rajasthan") }
+        var mDistrict by remember { mutableStateOf("") }
+        var mBlock by remember { mutableStateOf("") }
+        var mVillage by remember { mutableStateOf("") }
+        var mType by remember { mutableStateOf("Senior Secondary") }
+        var mPrincipal by remember { mutableStateOf("") }
+        var mMobile by remember { mutableStateOf("") }
+        var mError by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { showAddSchoolDialog = false },
+            title = { Text("मैन्युअल स्कूल जोड़ें (Add School)", fontWeight = FontWeight.Bold, color = Navy900) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (mError != null) {
+                        Text(mError!!, color = Red600, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedTextField(
+                        value = mName,
+                        onValueChange = { mName = it },
+                        label = { Text("School Name (स्कूल का नाम) *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = mRefCode,
+                        onValueChange = { mRefCode = it },
+                        label = { Text("UDISE / Reference Code (यू-डाइस कोड)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = mDistrict,
+                            onValueChange = { mDistrict = it },
+                            label = { Text("District (जिला) *") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = mBlock,
+                            onValueChange = { mBlock = it },
+                            label = { Text("Block (ब्लॉक) *") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = mVillage,
+                            onValueChange = { mVillage = it },
+                            label = { Text("Village (गांव)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = mType,
+                            onValueChange = { mType = it },
+                            label = { Text("Type (प्रकार)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    OutlinedTextField(
+                        value = mPrincipal,
+                        onValueChange = { mPrincipal = it },
+                        label = { Text("Principal Name (प्रधानाचार्य)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = mMobile,
+                        onValueChange = { mMobile = it },
+                        label = { Text("Principal Mobile (मोबाइल)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (mName.isBlank()) {
+                            mError = "School Name is required!"
+                            return@Button
+                        }
+                        val newSchool = School(
+                            schoolId = "sch_" + java.util.UUID.randomUUID().toString().take(8),
+                            schoolName = mName.trim(),
+                            referenceCode = mRefCode.trim(),
+                            state = mState.trim().ifBlank { "Rajasthan" },
+                            district = mDistrict.trim(),
+                            block = mBlock.trim(),
+                            village = mVillage.trim(),
+                            type = mType.trim(),
+                            principalName = mPrincipal.trim(),
+                            mobile = mMobile.trim(),
+                            createdAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        onImportSchools(listOf(newSchool), emptyList()) {
+                            showAddSchoolDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
+                ) {
+                    Text("Save School")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddSchoolDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Import Excel Preview & Validation Dialog
     if (importValidationResult != null) {
         val res = importValidationResult!!
@@ -240,6 +385,9 @@ fun SchoolManagementTab(
                             Text("• Valid Rows to Import: ${res.validRows}", color = Emerald600, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             Text("• Duplicates Flagged: ${res.duplicateRows}", color = Slate700, fontSize = 13.sp)
                             Text("• Invalid / Skipped Rows: ${res.invalidRows}", color = Red600, fontSize = 13.sp)
+                            if (res.completedVisitsToImport.isNotEmpty()) {
+                                Text("• Completed Visits Flagged (Col I/J): ${res.completedVisitsToImport.size}", color = Indigo600, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
                         }
                     }
 
@@ -255,7 +403,7 @@ fun SchoolManagementTab(
                 Button(
                     onClick = {
                         isImporting = true
-                        onImportSchools(res.schoolsToImport) {
+                        onImportSchools(res.schoolsToImport, res.completedVisitsToImport) {
                             isImporting = false
                             importValidationResult = null
                         }

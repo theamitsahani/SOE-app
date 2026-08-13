@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -80,7 +82,9 @@ fun AssignVisitsTab(
     ) -> Unit
 ) {
     var selectedSchool by remember { mutableStateOf<School?>(null) }
-    var selectedEmployee by remember { mutableStateOf<User?>(null) }
+    var selectedEmployee1 by remember { mutableStateOf<User?>(null) }
+    var selectedEmployee2 by remember { mutableStateOf<User?>(null) }
+    var enableCoOfficer by remember { mutableStateOf(false) }
     var visitDate by remember { mutableStateOf("15-Aug-2026") }
     var notes by remember { mutableStateOf("") }
 
@@ -92,7 +96,8 @@ fun AssignVisitsTab(
     var districtExpanded by remember { mutableStateOf(false) }
     var blockExpanded by remember { mutableStateOf(false) }
     var schoolDropdownExpanded by remember { mutableStateOf(false) }
-    var employeeDropdownExpanded by remember { mutableStateOf(false) }
+    var employee1DropdownExpanded by remember { mutableStateOf(false) }
+    var employee2DropdownExpanded by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var selectedVisitForDetails by remember { mutableStateOf<Visit?>(null) }
@@ -120,6 +125,21 @@ fun AssignVisitsTab(
             (selectedState == "All States" || sState == selectedState) &&
             (selectedDistrict == "All Districts" || school.district == selectedDistrict) &&
             (selectedBlock == "All Blocks" || school.block == selectedBlock)
+        }
+    }
+
+    // Determine target district for officer filtering
+    val targetDistrict = remember(selectedSchool, selectedDistrict) {
+        val d = selectedSchool?.district?.ifBlank { selectedDistrict } ?: selectedDistrict
+        if (d == "All Districts") "" else d
+    }
+
+    val filteredEmployees = remember(employees, targetDistrict) {
+        if (targetDistrict.isBlank()) {
+            employees
+        } else {
+            val matched = employees.filter { it.district.equals(targetDistrict, ignoreCase = true) }
+            if (matched.isNotEmpty()) matched else employees
         }
     }
 
@@ -159,10 +179,10 @@ fun AssignVisitsTab(
 
                     Text("Target Location Category (स्थान फ़िल्टर)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
 
-                    // State, District, Block Filter Row
+                    // Row 1: State & District Dropdowns
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         // State Dropdown
                         ExposedDropdownMenuBox(
@@ -174,11 +194,12 @@ fun AssignVisitsTab(
                                 value = selectedState,
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("State", fontSize = 11.sp) },
+                                label = { Text("State (राज्य)", fontSize = 11.sp) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
                                 shape = RoundedCornerShape(10.dp),
                                 colors = textFieldColors,
-                                modifier = Modifier.menuAnchor()
+                                singleLine = true,
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
                             )
                             ExposedDropdownMenu(
                                 expanded = stateExpanded,
@@ -186,7 +207,7 @@ fun AssignVisitsTab(
                             ) {
                                 stateList.forEach { s ->
                                     DropdownMenuItem(
-                                        text = { Text(s, fontSize = 12.sp) },
+                                        text = { Text(s, fontSize = 13.sp) },
                                         onClick = {
                                             selectedState = s
                                             selectedDistrict = "All Districts"
@@ -209,11 +230,12 @@ fun AssignVisitsTab(
                                 value = selectedDistrict,
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("District", fontSize = 11.sp) },
+                                label = { Text("District (जिला)", fontSize = 11.sp) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = districtExpanded) },
                                 shape = RoundedCornerShape(10.dp),
                                 colors = textFieldColors,
-                                modifier = Modifier.menuAnchor()
+                                singleLine = true,
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
                             )
                             ExposedDropdownMenu(
                                 expanded = districtExpanded,
@@ -221,7 +243,7 @@ fun AssignVisitsTab(
                             ) {
                                 districtList.forEach { d ->
                                     DropdownMenuItem(
-                                        text = { Text(d, fontSize = 12.sp) },
+                                        text = { Text(d, fontSize = 13.sp) },
                                         onClick = {
                                             selectedDistrict = d
                                             selectedBlock = "All Blocks"
@@ -232,37 +254,38 @@ fun AssignVisitsTab(
                                 }
                             }
                         }
+                    }
 
-                        // Block Dropdown
-                        ExposedDropdownMenuBox(
+                    // Row 2: Block Dropdown (Full Width for complete readability)
+                    ExposedDropdownMenuBox(
+                        expanded = blockExpanded,
+                        onExpandedChange = { blockExpanded = !blockExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedBlock,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Block (ब्लॉक)", fontSize = 11.sp) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = blockExpanded) },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = textFieldColors,
+                            singleLine = true,
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
                             expanded = blockExpanded,
-                            onExpandedChange = { blockExpanded = !blockExpanded },
-                            modifier = Modifier.weight(1f)
+                            onDismissRequest = { blockExpanded = false }
                         ) {
-                            OutlinedTextField(
-                                value = selectedBlock,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Block", fontSize = 11.sp) },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = blockExpanded) },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = textFieldColors,
-                                modifier = Modifier.menuAnchor()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = blockExpanded,
-                                onDismissRequest = { blockExpanded = false }
-                            ) {
-                                blockList.forEach { b ->
-                                    DropdownMenuItem(
-                                        text = { Text(b, fontSize = 12.sp) },
-                                        onClick = {
-                                            selectedBlock = b
-                                            selectedSchool = null
-                                            blockExpanded = false
-                                        }
-                                    )
-                                }
+                            blockList.forEach { b ->
+                                DropdownMenuItem(
+                                    text = { Text(b, fontSize = 13.sp) },
+                                    onClick = {
+                                        selectedBlock = b
+                                        selectedSchool = null
+                                        blockExpanded = false
+                                    }
+                                )
                             }
                         }
                     }
@@ -280,6 +303,7 @@ fun AssignVisitsTab(
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = schoolDropdownExpanded) },
                             shape = RoundedCornerShape(12.dp),
                             colors = textFieldColors,
+                            singleLine = true,
                             modifier = Modifier
                                 .menuAnchor()
                                 .fillMaxWidth()
@@ -300,35 +324,115 @@ fun AssignVisitsTab(
                         }
                     }
 
-                    // Select Officer Dropdown
+                    // District Filter Info Badge for Officers
+                    if (targetDistrict.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Indigo600.copy(alpha = 0.08f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = Indigo600, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Filtered Officers in $targetDistrict: ${filteredEmployees.size} available",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Indigo600
+                                )
+                            }
+                        }
+                    }
+
+                    // Primary Officer Selection
                     ExposedDropdownMenuBox(
-                        expanded = employeeDropdownExpanded,
-                        onExpandedChange = { employeeDropdownExpanded = !employeeDropdownExpanded }
+                        expanded = employee1DropdownExpanded,
+                        onExpandedChange = { employee1DropdownExpanded = !employee1DropdownExpanded }
                     ) {
                         OutlinedTextField(
-                            value = selectedEmployee?.name ?: "",
+                            value = selectedEmployee1?.let { "${it.name} (${it.district.ifBlank { "Unassigned" }})" } ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Assign to Field Officer") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = employeeDropdownExpanded) },
+                            label = { Text("Primary Field Officer (कर्मचारी 1) *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = employee1DropdownExpanded) },
                             shape = RoundedCornerShape(12.dp),
                             colors = textFieldColors,
+                            singleLine = true,
                             modifier = Modifier
                                 .menuAnchor()
                                 .fillMaxWidth()
                         )
                         ExposedDropdownMenu(
-                            expanded = employeeDropdownExpanded,
-                            onDismissRequest = { employeeDropdownExpanded = false }
+                            expanded = employee1DropdownExpanded,
+                            onDismissRequest = { employee1DropdownExpanded = false }
                         ) {
-                            employees.forEach { emp ->
+                            filteredEmployees.forEach { emp ->
                                 DropdownMenuItem(
-                                    text = { Text("${emp.name} (${emp.email})", fontSize = 13.sp) },
+                                    text = { Text("${emp.name} • ${emp.district} (${emp.email})", fontSize = 13.sp) },
                                     onClick = {
-                                        selectedEmployee = emp
-                                        employeeDropdownExpanded = false
+                                        selectedEmployee1 = emp
+                                        employee1DropdownExpanded = false
                                     }
                                 )
+                            }
+                        }
+                    }
+
+                    // Optional Secondary Co-Officer Toggle & Selection
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Assign 2nd Co-Officer to Same School? (2 कर्मचारी जोड़ें)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Slate700
+                        )
+                        Switch(
+                            checked = enableCoOfficer,
+                            onCheckedChange = {
+                                enableCoOfficer = it
+                                if (!it) selectedEmployee2 = null
+                            }
+                        )
+                    }
+
+                    if (enableCoOfficer) {
+                        ExposedDropdownMenuBox(
+                            expanded = employee2DropdownExpanded,
+                            onExpandedChange = { employee2DropdownExpanded = !employee2DropdownExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedEmployee2?.let { "${it.name} (${it.district.ifBlank { "Unassigned" }})" } ?: "",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Secondary Co-Officer (कर्मचारी 2)") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = employee2DropdownExpanded) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = textFieldColors,
+                                singleLine = true,
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = employee2DropdownExpanded,
+                                onDismissRequest = { employee2DropdownExpanded = false }
+                            ) {
+                                filteredEmployees.filter { it.userId != selectedEmployee1?.userId }.forEach { emp ->
+                                    DropdownMenuItem(
+                                        text = { Text("${emp.name} • ${emp.district} (${emp.email})", fontSize = 13.sp) },
+                                        onClick = {
+                                            selectedEmployee2 = emp
+                                            employee2DropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -355,34 +459,60 @@ fun AssignVisitsTab(
 
                     Button(
                         onClick = {
-                            if (selectedSchool != null && selectedEmployee != null) {
+                            if (selectedSchool != null && selectedEmployee1 != null) {
                                 isSubmitting = true
-                                onAssignTask(
-                                    selectedSchool!!,
-                                    selectedEmployee!!,
-                                    visitDate,
-                                    notes
-                                ) { res ->
+                                var assignedCount = 0
+                                var hasError = false
+                                var errorMsg = ""
+
+                                fun checkDone() {
                                     isSubmitting = false
-                                    if (res.isSuccess) {
-                                        message = "Task successfully assigned to ${selectedEmployee?.name}"
+                                    if (!hasError) {
+                                        val officersText = if (enableCoOfficer && selectedEmployee2 != null)
+                                            "${selectedEmployee1?.name} & ${selectedEmployee2?.name}"
+                                        else "${selectedEmployee1?.name}"
+                                        message = "Task successfully assigned to $officersText!"
                                         selectedSchool = null
-                                        selectedEmployee = null
+                                        selectedEmployee1 = null
+                                        selectedEmployee2 = null
                                         notes = ""
                                     } else {
-                                        message = "Error: " + res.exceptionOrNull()?.localizedMessage
+                                        message = "Error assigning task: $errorMsg"
+                                    }
+                                }
+
+                                onAssignTask(selectedSchool!!, selectedEmployee1!!, visitDate, notes) { res1 ->
+                                    if (res1.isFailure) {
+                                        hasError = true
+                                        errorMsg = res1.exceptionOrNull()?.localizedMessage ?: "Unknown error"
+                                    }
+                                    assignedCount++
+                                    if (!enableCoOfficer || selectedEmployee2 == null) {
+                                        checkDone()
+                                    } else {
+                                        onAssignTask(selectedSchool!!, selectedEmployee2!!, visitDate, notes) { res2 ->
+                                            if (res2.isFailure) {
+                                                hasError = true
+                                                errorMsg = res2.exceptionOrNull()?.localizedMessage ?: "Unknown error"
+                                            }
+                                            assignedCount++
+                                            checkDone()
+                                        }
                                     }
                                 }
                             }
                         },
-                        enabled = !isSubmitting && selectedSchool != null && selectedEmployee != null,
+                        enabled = !isSubmitting && selectedSchool != null && selectedEmployee1 != null,
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.AssignmentTurnedIn, contentDescription = null)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Confirm & Assign Visit Task", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (enableCoOfficer && selectedEmployee2 != null) "Assign Visit Task to Both Officers" else "Confirm & Assign Visit Task",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

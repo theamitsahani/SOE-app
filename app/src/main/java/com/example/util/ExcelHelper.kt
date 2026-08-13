@@ -7,6 +7,8 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.data.model.School
 import com.example.data.model.Visit
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -20,6 +22,7 @@ data class ImportValidationResult(
     val invalidRows: Int,
     val duplicateRows: Int,
     val schoolsToImport: List<School>,
+    val completedVisitsToImport: List<com.example.data.model.Visit> = emptyList(),
     val errors: List<String>
 )
 
@@ -52,13 +55,23 @@ object ExcelHelper {
     }
 
     /**
-     * Parses uploaded CSV / Excel string or Uri content.
-     * Expected column names EXACTLY:
-     * S.R, DISTRICT, SCHOOL NAME, TYPE, VILLAGE, PRINCIPAL NAME, BLOCK, MOB, Visit Date
+     * Parses uploaded CSV / Excel content.
+     * Specific User Column Specification:
+     * Column A (0): S.R (Ignored)
+     * Column B (1): DISTRICT
+     * Column C (2): SCHOOL NAME -> Must not be empty. Only invalid if Column C is blank!
+     * Column D (3): TYPE
+     * Column E (4): VILLAGE
+     * Column F (5): PRINCIPAL NAME
+     * Column G (6): BLOCK
+     * Column H (7): MOB
+     * Column I (8): Visit Date
+     * Column J (9): Status -> If Column I is date & Column J is "TRUE" / "True", marked as COMPLETED!
      */
     fun parseSchoolCsv(context: Context, uri: Uri, existingSchools: List<School>): ImportValidationResult {
         val errors = mutableListOf<String>()
         val schools = mutableListOf<School>()
+        val completedVisits = mutableListOf<com.example.data.model.Visit>()
         var totalRows = 0
         var validRows = 0
         var invalidRows = 0
@@ -66,33 +79,65 @@ object ExcelHelper {
 
         try {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return ImportValidationResult(
-                0, 0, 0, 0, emptyList(), listOf("Failed to read file content")
+                0, 0, 0, 0, emptyList(), emptyList(), listOf("Failed to read file content")
             )
             val reader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8))
             val lines = reader.readLines()
             if (lines.isEmpty()) {
-                return ImportValidationResult(0, 0, 0, 0, emptyList(), listOf("Uploaded file is empty"))
+                return ImportValidationResult(0, 0, 0, 0, emptyList(), emptyList(), listOf("Uploaded file is empty"))
             }
 
-            // Read header
-            val headerLine = lines.first()
-            val headers = parseCsvLine(headerLine).map { it.trim().uppercase() }
+            // Check if first line is a header
+            val firstLine = lines.first()
+            val firstCols = parseCsvLine(firstLine).map { it.trim().uppercase() }
+            val hasHeader = firstCols.any { it.contains("DISTRICT") || it.contains("SCHOOL") || it == "S.R" || it == "SR" }
 
-            // Find column indices
-            val srIdx = headers.indexOfFirst { it == "S.R" || it == "SR" }
-            val districtIdx = headers.indexOfFirst { it.contains("DISTRICT") }
-            val schoolNameIdx = headers.indexOfFirst { it.contains("SCHOOL") || it.contains("NAME") }
-            val typeIdx = headers.indexOfFirst { it == "TYPE" }
-            val villageIdx = headers.indexOfFirst { it == "VILLAGE" }
-            val principalNameIdx = headers.indexOfFirst { it.contains("PRINCIPAL") }
-            val blockIdx = headers.indexOfFirst { it == "BLOCK" }
-            val mobIdx = headers.indexOfFirst { it.contains("MOB") || it.contains("PHONE") }
-            val visitDateIdx = headers.indexOfFirst { it.contains("VISIT") || it.contains("DATE") }
+            val startIndex = if (hasHeader) 1 else 0
+
+            // Column indices
+            var districtIdx = 1
+            var schoolNameIdx = 2
+            var typeIdx = 3
+            var villageIdx = 4
+            var principalNameIdx = 5
+            var blockIdx = 6
+            var mobIdx = 7
+            var visitDateIdx = 8
+            var statusIdx = 9
+
+            if (hasHeader) {
+                val dIdx = firstCols.indexOfFirst { it.contains("DISTRICT") }
+                if (dIdx >= 0) districtIdx = dIdx
+
+                val sIdx = firstCols.indexOfFirst { it.contains("SCHOOL") || it.contains("NAME") }
+                if (sIdx >= 0) schoolNameIdx = sIdx
+
+                val tIdx = firstCols.indexOfFirst { it == "TYPE" }
+                if (tIdx >= 0) typeIdx = tIdx
+
+                val vIdx = firstCols.indexOfFirst { it == "VILLAGE" }
+                if (vIdx >= 0) villageIdx = vIdx
+
+                val pIdx = firstCols.indexOfFirst { it.contains("PRINCIPAL") }
+                if (pIdx >= 0) principalNameIdx = pIdx
+
+                val bIdx = firstCols.indexOfFirst { it == "BLOCK" }
+                if (bIdx >= 0) blockIdx = bIdx
+
+                val mIdx = firstCols.indexOfFirst { it.contains("MOB") || it.contains("PHONE") }
+                if (mIdx >= 0) mobIdx = mIdx
+
+                val vdIdx = firstCols.indexOfFirst { it.contains("VISIT") || it.contains("DATE") }
+                if (vdIdx >= 0) visitDateIdx = vdIdx
+
+                val stIdx = firstCols.indexOfFirst { it.contains("STATUS") }
+                if (stIdx >= 0) statusIdx = stIdx
+            }
 
             val existingNames = existingSchools.map { it.schoolName.trim().lowercase() }.toSet()
             val existingRefCodes = existingSchools.map { it.referenceCode.trim() }.filter { it.isNotEmpty() }.toSet()
 
-            for (i in 1 until lines.size) {
+            for (i in startIndex until lines.size) {
                 val line = lines[i]
                 if (line.isBlank()) continue
                 totalRows++
@@ -105,25 +150,24 @@ object ExcelHelper {
                 val block = getCol(blockIdx)
                 val principal = getCol(principalNameIdx)
                 val mobile = getCol(mobIdx)
-                val sr = getCol(srIdx)
+                val sr = getCol(0) // Column A ignored, but kept if needed
                 val type = getCol(typeIdx)
                 val village = getCol(villageIdx)
                 val visitDate = getCol(visitDateIdx)
+                val statusStr = getCol(statusIdx)
 
+                // RULE: ONLY if Column C (school name) is empty, consider row INVALID
                 if (rawSchoolName.isBlank()) {
                     invalidRows++
-                    errors.add("Row ${i + 1}: Missing School Name")
+                    errors.add("Row ${i + 1}: Column C (School Name) is empty")
                     continue
                 }
 
-                // Extract bracketed reference code (e.g. "GSSS School (8788688)" -> "8788688")
                 val bracketRegex = Regex("""\(([^)]+)\)""")
                 val match = bracketRegex.find(rawSchoolName)
                 val referenceCode = match?.groupValues?.get(1)?.trim() ?: ""
-
                 val schoolNameClean = rawSchoolName.trim()
 
-                // Check duplicate
                 val isDuplicate = existingNames.contains(schoolNameClean.lowercase()) ||
                         (referenceCode.isNotEmpty() && existingRefCodes.contains(referenceCode))
 
@@ -131,10 +175,12 @@ object ExcelHelper {
                     duplicateRows++
                 }
 
+                val schoolId = "sch_" + UUID.randomUUID().toString().take(8)
+
                 val school = School(
-                    schoolId = "sch_" + UUID.randomUUID().toString().take(8),
+                    schoolId = schoolId,
                     sr = sr,
-                    district = district,
+                    district = district.ifBlank { "Rajasthan" },
                     schoolName = schoolNameClean,
                     referenceCode = referenceCode,
                     type = type,
@@ -149,6 +195,50 @@ object ExcelHelper {
 
                 schools.add(school)
                 validRows++
+
+                // RULE: If Column I is filled with date AND Column J is TRUE / True -> mark school as COMPLETE
+                val isCompleted = visitDate.isNotBlank() && (
+                    statusStr.equals("TRUE", ignoreCase = true) ||
+                    statusStr.equals("1") ||
+                    statusStr.equals("YES", ignoreCase = true) ||
+                    statusStr.equals("COMPLETED", ignoreCase = true)
+                )
+
+                if (isCompleted) {
+                    val answers = com.example.data.model.VisitAnswers(
+                        q1_soeName = "Excel Import System",
+                        q2_visitDate = visitDate,
+                        q3_schoolName = schoolNameClean,
+                        q4_udiseCode = referenceCode,
+                        q5_district = district,
+                        q6_block = block,
+                        q7_principalName = principal,
+                        q8_principalMobile = mobile,
+                        q9_metPrincipal = "हाँ",
+                        q10_missionGyanAwareness = "हाँ",
+                        q11_studentCount = "Verified",
+                        q12_schoolResponse = "Completed (Excel Import)",
+                        q20_finalRemarks = "Imported from Excel as Completed Visit"
+                    )
+                    val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+                    val answersAdapter = moshi.adapter(com.example.data.model.VisitAnswers::class.java)
+
+                    val visit = com.example.data.model.Visit(
+                        visitId = "vst_" + UUID.randomUUID().toString().take(8),
+                        schoolId = schoolId,
+                        employeeId = "emp_system",
+                        employeeName = "System (Excel Import)",
+                        schoolName = schoolNameClean,
+                        district = district,
+                        block = block,
+                        visitDate = visitDate,
+                        status = com.example.data.model.VisitStatus.SUBMITTED,
+                        answersJson = answersAdapter.toJson(answers),
+                        photosJson = "{}",
+                        syncStatus = com.example.data.model.SyncStatus.SYNCED
+                    )
+                    completedVisits.add(visit)
+                }
             }
 
         } catch (e: Exception) {
@@ -161,6 +251,7 @@ object ExcelHelper {
             invalidRows = invalidRows,
             duplicateRows = duplicateRows,
             schoolsToImport = schools,
+            completedVisitsToImport = completedVisits,
             errors = errors
         )
     }

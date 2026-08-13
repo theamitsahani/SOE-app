@@ -181,9 +181,12 @@ class MainActivity : ComponentActivity() {
                                             AdminTab.SCHOOLS -> {
                                                 SchoolManagementTab(
                                                     schools = schools,
-                                                    onImportSchools = { newSchools, callback ->
+                                                    onImportSchools = { newSchools, completedVisits, callback ->
                                                         scope.launch {
                                                             val res = schoolRepository.importSchools(newSchools)
+                                                             for (v in completedVisits) {
+                                                                 visitRepository.submitVisit(v)
+                                                             }
                                                             callback(res)
                                                         }
                                                     },

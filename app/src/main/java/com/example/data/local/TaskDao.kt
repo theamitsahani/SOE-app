@@ -30,4 +30,7 @@ interface TaskDao {
 
     @Query("DELETE FROM tasks WHERE taskId = :taskId")
     suspend fun deleteTask(taskId: String)
+
+    @Query("UPDATE tasks SET status = 'SUBMITTED' WHERE schoolId = :schoolId")
+    suspend fun markTasksSubmittedForSchool(schoolId: String)
 }

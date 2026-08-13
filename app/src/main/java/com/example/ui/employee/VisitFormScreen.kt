@@ -25,9 +25,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.School
@@ -82,6 +85,7 @@ import com.example.ui.theme.Indigo600
 import com.example.ui.theme.Navy900
 import com.example.ui.theme.Red600
 import com.example.ui.theme.Slate200
+import com.example.ui.theme.Slate300
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
 import com.squareup.moshi.Moshi
@@ -552,7 +556,7 @@ fun VisitFormScreen(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.Add, contentDescription = null, tint = Slate500)
+                                                Icon(Icons.Default.Add, contentDescription = "Attached Photo", tint = Slate500)
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text("Tap to capture / upload photo", fontSize = 13.sp, color = Slate500)
                                             }
@@ -562,7 +566,8 @@ fun VisitFormScreen(
                                             items(currentList) { uriStr ->
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(80.dp)
+                                                        .size(84.dp)
+                                                         .border(1.5.dp, Emerald600, RoundedCornerShape(12.dp))
                                                         .clip(RoundedCornerShape(12.dp))
                                                 ) {
                                                     AsyncImage(
