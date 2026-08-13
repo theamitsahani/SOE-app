@@ -1,0 +1,6 @@
+{
+  "name": "SOE School Visit",
+  "description": "School Visit Management Application for SOE / Mission Gyan field visits.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
