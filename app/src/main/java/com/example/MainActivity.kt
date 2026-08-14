@@ -51,7 +51,7 @@ sealed class ScreenState {
     data object Login : ScreenState()
     data class Admin(val adminUser: User) : ScreenState()
     data class Employee(val employeeUser: User) : ScreenState()
-    data class VisitForm(val employeeUser: User, val task: Task?, val school: School?) : ScreenState()
+    data class VisitForm(val employeeUser: User, val task: Task?, val school: School?, val existingVisit: Visit? = null) : ScreenState()
 }
 
 class MainActivity : ComponentActivity() {
@@ -222,13 +222,13 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             }
                                             AdminTab.VISIT_REPORTS -> {
-                                                ReportsTab(visits = visits, initialStatusFilter = reportsStatusFilter)
+                                                ReportsTab(visits = visits, schools = schools, initialStatusFilter = reportsStatusFilter)
                                             }
                                             AdminTab.PHOTO_GALLERY -> {
                                                 PhotoGalleryTab(visits = visits)
                                             }
                                             AdminTab.EXPORT -> {
-                                                ReportsTab(visits = visits)
+                                                ReportsTab(visits = visits, schools = schools)
                                             }
                                             AdminTab.SETTINGS -> {
                                                 SettingsTab(
@@ -260,6 +260,15 @@ class MainActivity : ComponentActivity() {
                                             val matchedSchool = schools.find { it.schoolId == task.schoolId }
                                             currentScreen = ScreenState.VisitForm(state.employeeUser, task, matchedSchool)
                                         },
+                                        onEditVisit = { visit ->
+                                            val matchedSchool = schools.find { it.schoolId == visit.schoolId }
+                                            currentScreen = ScreenState.VisitForm(
+                                                employeeUser = state.employeeUser,
+                                                task = null,
+                                                school = matchedSchool,
+                                                existingVisit = visit
+                                            )
+                                        },
                                         onLogoutClick = {
                                             authRepository.logout()
                                             currentScreen = ScreenState.Login
@@ -272,6 +281,7 @@ class MainActivity : ComponentActivity() {
                                         employeeUser = state.employeeUser,
                                         task = state.task,
                                         initialSchool = state.school,
+                                        existingVisit = state.existingVisit,
                                         isOnline = isOnline,
                                         pendingSyncCount = pendingSyncCount,
                                         onBackClick = {

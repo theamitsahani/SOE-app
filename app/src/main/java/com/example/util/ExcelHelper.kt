@@ -456,7 +456,7 @@ object ExcelHelper {
         // Headers
         writer.write(
             "Visit ID,Date,Employee,District,Block,School Name,Reference Code,Principal Name,Principal Mobile," +
-                    "Met Principal,Mission Gyan Knowledge,Student Attendance,School Response,BCI Details,WhatsApp Group Status," +
+                    "Met Principal,Mission Gyan Knowledge,Student Attendance,School Response,BCI Name,BCI Mobile,BCI Full Details,WhatsApp Group Status," +
                     "Poster Installed,Key Observations,Problems/Help Required,Follow-up Needed,Smart Class Status,Final Remarks\n"
         )
 
@@ -467,11 +467,20 @@ object ExcelHelper {
                 return "\"$escaped\""
             }
 
+            val bciName = a.q13_bciName.ifBlank {
+                if (a.q13_bciContactDetails.contains("-")) a.q13_bciContactDetails.substringBefore("-").trim()
+                else a.q13_bciContactDetails
+            }
+            val bciMobile = a.q13_bciMobile.ifBlank {
+                if (a.q13_bciContactDetails.contains("-")) a.q13_bciContactDetails.substringAfter("-").trim()
+                else ""
+            }
+
             writer.write(
                 "${sanitize(v.visitId)},${sanitize(v.visitDate)},${sanitize(v.employeeName)},${sanitize(v.district)},${sanitize(v.block)}," +
                         "${sanitize(v.schoolName)},${sanitize(a.q4_udiseCode)},${sanitize(a.q7_principalName)},${sanitize(a.q8_principalMobile)}," +
                         "${sanitize(a.q9_metPrincipal)},${sanitize(a.q10_missionGyanAwareness)},${sanitize(a.q11_studentCount)},${sanitize(a.q12_schoolResponse)}," +
-                        "${sanitize(a.q13_bciContactDetails)},${sanitize(a.q14_whatsappGroupAdded)},${sanitize(a.q15_posterInstalled)}," +
+                        "${sanitize(bciName)},${sanitize(bciMobile)},${sanitize(a.q13_bciContactDetails)},${sanitize(a.q14_whatsappGroupAdded)},${sanitize(a.q15_posterInstalled)}," +
                         "${sanitize(a.q16_keyObservations)},${sanitize(a.q17_problemsOrAssistance)},${sanitize(a.q18_followupRequired)}," +
                         "${sanitize(a.q21_smartClassStatus)},${sanitize(a.q20_finalRemarks)}\n"
             )

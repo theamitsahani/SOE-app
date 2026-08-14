@@ -16,6 +16,8 @@ data class VisitAnswers(
     val q10_missionGyanAwareness: String = "हाँ", // हाँ, नहीं, थोड़ी जानकारी थी
     val q11_studentCount: String = "",
     val q12_schoolResponse: String = "बहुत अच्छी", // बहुत अच्छी, अच्छी, सामान्य, कमजोर
+    val q13_bciName: String = "",
+    val q13_bciMobile: String = "",
     val q13_bciContactDetails: String = "",
     val q14_whatsappGroupAdded: String = "हाँ", // हाँ, नहीं, लंबित
     val q15_posterInstalled: String = "हाँ", // हाँ, नहीं

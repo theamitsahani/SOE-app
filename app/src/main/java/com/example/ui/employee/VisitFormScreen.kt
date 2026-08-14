@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -32,6 +33,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AlertDialog
@@ -68,6 +71,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -99,6 +103,7 @@ fun VisitFormScreen(
     employeeUser: User,
     task: Task?,
     initialSchool: School?,
+    existingVisit: Visit? = null,
     isOnline: Boolean,
     pendingSyncCount: Int,
     onBackClick: () -> Unit,
@@ -108,38 +113,94 @@ fun VisitFormScreen(
     var currentStep by remember { mutableIntStateOf(1) }
     val totalSteps = 5
 
+    // Parse existing answers if editing
+    val parsedExistingAnswers = remember(existingVisit) {
+        if (existingVisit != null && existingVisit.answersJson.isNotBlank()) {
+            try {
+                val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+                moshi.adapter(VisitAnswers::class.java).fromJson(existingVisit.answersJson) ?: VisitAnswers()
+            } catch (e: Exception) {
+                VisitAnswers()
+            }
+        } else {
+            VisitAnswers()
+        }
+    }
+
+    // Parse existing photos if editing
+    val parsedExistingPhotos = remember(existingVisit) {
+        if (existingVisit != null && existingVisit.photosJson.isNotBlank()) {
+            try {
+                val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+                val mapType = Types.newParameterizedType(Map::class.java, String::class.java, List::class.java)
+                val adapter = moshi.adapter<Map<String, List<String>>>(mapType)
+                adapter.fromJson(existingVisit.photosJson) ?: emptyMap()
+            } catch (e: Exception) {
+                emptyMap()
+            }
+        } else {
+            emptyMap()
+        }
+    }
+
     // School Details State
-    var schoolName by remember { mutableStateOf(task?.schoolName ?: initialSchool?.schoolName ?: "") }
-    var udiseCode by remember { mutableStateOf(initialSchool?.referenceCode ?: "08010100101") }
-    var stateName by remember { mutableStateOf(initialSchool?.state ?: "Rajasthan") }
-    var district by remember { mutableStateOf(task?.district ?: initialSchool?.district ?: "") }
-    var block by remember { mutableStateOf(task?.block ?: initialSchool?.block ?: "") }
-    var principalName by remember { mutableStateOf(initialSchool?.principalName ?: "") }
-    var principalMobile by remember { mutableStateOf(initialSchool?.mobile ?: "") }
-    var visitDate by remember { mutableStateOf(task?.visitDate ?: "13-Aug-2026") }
+    var schoolName by remember { mutableStateOf(existingVisit?.schoolName?.ifBlank { null } ?: task?.schoolName ?: initialSchool?.schoolName ?: "") }
+    var udiseCode by remember { mutableStateOf(parsedExistingAnswers.q4_udiseCode.ifBlank { initialSchool?.referenceCode?.ifBlank { null } ?: "08010100101" }) }
+    var stateName by remember { mutableStateOf(existingVisit?.state?.ifBlank { null } ?: initialSchool?.state ?: "Rajasthan") }
+    var district by remember { mutableStateOf(existingVisit?.district?.ifBlank { null } ?: task?.district ?: initialSchool?.district ?: "") }
+    var block by remember { mutableStateOf(existingVisit?.block?.ifBlank { null } ?: task?.block ?: initialSchool?.block ?: "") }
+    var principalName by remember { mutableStateOf(parsedExistingAnswers.q7_principalName.ifBlank { initialSchool?.principalName ?: "" }) }
+    var principalMobile by remember { mutableStateOf(parsedExistingAnswers.q8_principalMobile.ifBlank { initialSchool?.principalMobile?.ifBlank { initialSchool.mobile } ?: "" }) }
+    var visitDate by remember { mutableStateOf(existingVisit?.visitDate?.ifBlank { null } ?: task?.visitDate ?: "13-Aug-2026") }
 
     // Participating Classes Checkboxes (Class 6th to 12th)
     val availableClasses = remember { listOf("Class 6th", "Class 7th", "Class 8th", "Class 9th", "Class 10th", "Class 11th", "Class 12th") }
-    var selectedClasses by remember { mutableStateOf(setOf("Class 6th", "Class 7th", "Class 8th", "Class 9th", "Class 10th", "Class 11th", "Class 12th")) }
+    var selectedClasses by remember {
+        val initialSelected = if (parsedExistingAnswers.q22_participatingClasses.isNotBlank()) {
+            parsedExistingAnswers.q22_participatingClasses.split(",").map { it.trim() }.toSet()
+        } else {
+            setOf("Class 6th", "Class 7th", "Class 8th", "Class 9th", "Class 10th", "Class 11th", "Class 12th")
+        }
+        mutableStateOf(initialSelected)
+    }
 
     // Questionnaire Answers
-    var metPrincipal by remember { mutableStateOf("हाँ") }
-    var missionGyanAwareness by remember { mutableStateOf("हाँ") }
-    var studentCount by remember { mutableStateOf("120") }
-    var schoolResponse by remember { mutableStateOf("बहुत अच्छी") }
-    var bciContactDetails by remember { mutableStateOf("") }
-    var whatsappGroupAdded by remember { mutableStateOf("हाँ") }
-    var posterInstalled by remember { mutableStateOf("हाँ") }
-    var keyObservations by remember { mutableStateOf("") }
-    var problemsOrAssistance by remember { mutableStateOf("") }
-    var followupRequired by remember { mutableStateOf("नहीं") }
-    var finalRemarks by remember { mutableStateOf("") }
-    var smartClassStatus by remember { mutableStateOf("बहुत अच्छी") }
+    var metPrincipal by remember { mutableStateOf(parsedExistingAnswers.q9_metPrincipal.ifBlank { "हाँ" }) }
+    var missionGyanAwareness by remember { mutableStateOf(parsedExistingAnswers.q10_missionGyanAwareness.ifBlank { "हाँ" }) }
+    var studentCount by remember { mutableStateOf(parsedExistingAnswers.q11_studentCount.ifBlank { "120" }) }
+    var schoolResponse by remember { mutableStateOf(parsedExistingAnswers.q12_schoolResponse.ifBlank { "बहुत अच्छी" }) }
+
+    // Point 13: BCI Name and Contact Number
+    var bciName by remember {
+        val initialBciName = parsedExistingAnswers.q13_bciName.ifBlank {
+            if (parsedExistingAnswers.q13_bciContactDetails.contains("-")) parsedExistingAnswers.q13_bciContactDetails.substringBefore("-").trim()
+            else parsedExistingAnswers.q13_bciContactDetails
+        }
+        mutableStateOf(initialBciName)
+    }
+    var bciMobile by remember {
+        val initialBciMobile = parsedExistingAnswers.q13_bciMobile.ifBlank {
+            if (parsedExistingAnswers.q13_bciContactDetails.contains("-")) parsedExistingAnswers.q13_bciContactDetails.substringAfter("-").trim()
+            else ""
+        }
+        mutableStateOf(initialBciMobile)
+    }
+
+    var whatsappGroupAdded by remember { mutableStateOf(parsedExistingAnswers.q14_whatsappGroupAdded.ifBlank { "हाँ" }) }
+    var posterInstalled by remember { mutableStateOf(parsedExistingAnswers.q15_posterInstalled.ifBlank { "हाँ" }) }
+    var keyObservations by remember { mutableStateOf(parsedExistingAnswers.q16_keyObservations) }
+    var problemsOrAssistance by remember { mutableStateOf(parsedExistingAnswers.q17_problemsOrAssistance) }
+    var followupRequired by remember { mutableStateOf(parsedExistingAnswers.q18_followupRequired.ifBlank { "नहीं" }) }
+    var finalRemarks by remember { mutableStateOf(parsedExistingAnswers.q20_finalRemarks) }
+    var smartClassStatus by remember { mutableStateOf(parsedExistingAnswers.q21_smartClassStatus.ifBlank { "बहुत अच्छी" }) }
 
     // Photo Map Category ID -> List of Uri Strings
     val photoMap = remember {
         mutableStateMapOf<String, MutableList<String>>().apply {
-            PhotoCategory.entries.forEach { put(it.categoryId, mutableListOf()) }
+            PhotoCategory.entries.forEach { cat ->
+                val existingList = parsedExistingPhotos[cat.categoryId]?.toMutableList() ?: mutableListOf()
+                put(cat.categoryId, existingList)
+            }
         }
     }
 
@@ -164,7 +225,11 @@ fun VisitFormScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("SOE School Visit Form", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (existingVisit != null) "Edit Visit Report (रिपोर्ट संशोधन)" else "SOE School Visit Form",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Text(schoolName, fontSize = 12.sp, color = Slate500, maxLines = 1)
                     }
                 },
@@ -401,13 +466,42 @@ fun VisitFormScreen(
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text("13. BCI संपर्क विवरण (BCI Contact Details)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy900)
-                                Spacer(modifier = Modifier.height(8.dp))
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = "13. BCI संपर्क विवरण (BCI Details)",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Navy900
+                                )
+
+                                // Field 1: BCI Officer Name
                                 OutlinedTextField(
-                                    value = bciContactDetails,
-                                    onValueChange = { bciContactDetails = it },
-                                    placeholder = { Text("Name, Designation & Contact Number") },
+                                    value = bciName,
+                                    onValueChange = { bciName = it },
+                                    label = { Text("BCI Officer Name (BCI का नाम)", fontSize = 12.sp) },
+                                    placeholder = { Text("Enter BCI Officer Name") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Person, contentDescription = null, tint = Indigo600, modifier = Modifier.size(18.dp))
+                                    },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                // Field 2: BCI Contact Mobile Number
+                                OutlinedTextField(
+                                    value = bciMobile,
+                                    onValueChange = { bciMobile = it },
+                                    label = { Text("BCI Contact Number (BCI मोबाइल नंबर)", fontSize = 12.sp) },
+                                    placeholder = { Text("10-digit mobile number") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Phone, contentDescription = null, tint = Indigo600, modifier = Modifier.size(18.dp))
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -620,6 +714,12 @@ fun VisitFormScreen(
                                 isSubmitting = true
                                 submitError = null
 
+                                val combinedBciDetails = if (bciName.isNotBlank() || bciMobile.isNotBlank()) {
+                                    listOf(bciName.trim(), bciMobile.trim()).filter { it.isNotBlank() }.joinToString(" - ")
+                                } else {
+                                    ""
+                                }
+
                                 val answers = VisitAnswers(
                                     q1_soeName = employeeUser.name,
                                     q2_visitDate = visitDate,
@@ -633,7 +733,9 @@ fun VisitFormScreen(
                                     q10_missionGyanAwareness = missionGyanAwareness,
                                     q11_studentCount = studentCount,
                                     q12_schoolResponse = schoolResponse,
-                                    q13_bciContactDetails = bciContactDetails,
+                                    q13_bciName = bciName.trim(),
+                                    q13_bciMobile = bciMobile.trim(),
+                                    q13_bciContactDetails = combinedBciDetails,
                                     q14_whatsappGroupAdded = whatsappGroupAdded,
                                     q15_posterInstalled = posterInstalled,
                                     q16_keyObservations = keyObservations,
@@ -650,8 +752,8 @@ fun VisitFormScreen(
                                 val mapType = Types.newParameterizedType(Map::class.java, String::class.java, List::class.java)
                                 val photosAdapter = moshi.adapter<Map<String, List<String>>>(mapType)
 
-                                val visitId = task?.visitId ?: "vst_" + UUID.randomUUID().toString().take(8)
-                                val schoolId = task?.schoolId ?: initialSchool?.schoolId ?: "sch_" + UUID.randomUUID().toString().take(8)
+                                val visitId = existingVisit?.visitId ?: task?.visitId ?: ("vst_" + UUID.randomUUID().toString().take(8))
+                                val schoolId = existingVisit?.schoolId ?: task?.schoolId ?: initialSchool?.schoolId ?: ("sch_" + UUID.randomUUID().toString().take(8))
 
                                 val finalVisit = Visit(
                                     visitId = visitId,
@@ -665,7 +767,9 @@ fun VisitFormScreen(
                                     visitDate = visitDate,
                                     status = VisitStatus.SUBMITTED,
                                     answersJson = answersAdapter.toJson(answers),
-                                    photosJson = photosAdapter.toJson(photoMap.mapValues { it.value.toList() })
+                                    photosJson = photosAdapter.toJson(photoMap.mapValues { it.value.toList() }),
+                                    createdAt = existingVisit?.createdAt ?: System.currentTimeMillis(),
+                                    updatedAt = System.currentTimeMillis()
                                 )
 
                                 onSubmitVisit(finalVisit) { res ->

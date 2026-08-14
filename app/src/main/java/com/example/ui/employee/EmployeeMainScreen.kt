@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -75,6 +77,9 @@ import com.example.data.model.Visit
 import com.example.data.model.VisitStatus
 import com.example.ui.components.StatusChip
 import com.example.ui.components.SyncStatusBanner
+import com.example.ui.components.VisitDetailDialog
+import com.example.ui.theme.Amber100
+import com.example.ui.theme.Amber600
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald600
 import com.example.ui.theme.Indigo600
@@ -101,6 +106,7 @@ fun EmployeeMainScreen(
     pendingSyncCount: Int,
     onSyncClick: () -> Unit,
     onStartVisit: (Task) -> Unit,
+    onEditVisit: (Visit) -> Unit = {},
     onLogoutClick: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -188,7 +194,11 @@ fun EmployeeMainScreen(
                     )
                 }
                 EmployeeNavTab.COMPLETED -> {
-                    CompletedVisitsSection(visits = completedVisits)
+                    CompletedVisitsSection(
+                        visits = completedVisits,
+                        schools = schools,
+                        onEditVisit = onEditVisit
+                    )
                 }
                 EmployeeNavTab.PROFILE -> {
                     EmployeeProfileSection(user = employeeUser, onLogout = onLogoutClick)
@@ -631,14 +641,41 @@ private fun SchoolInfoRow(label: String, value: String) {
 }
 
 @Composable
-fun CompletedVisitsSection(visits: List<Visit>) {
+fun CompletedVisitsSection(
+    visits: List<Visit>,
+    schools: List<School> = emptyList(),
+    onEditVisit: (Visit) -> Unit = {}
+) {
+    var selectedVisitForDetail by remember { mutableStateOf<Visit?>(null) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Your Completed Visits", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Navy900)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Your Completed Visits", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                    Text("Visits are editable within 12 hours of submission", fontSize = 11.sp, color = Slate500)
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFEFF6FF)
+                ) {
+                    Text(
+                        text = "${visits.size} Total",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Indigo600,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
         }
 
         if (visits.isEmpty()) {
@@ -657,32 +694,150 @@ fun CompletedVisitsSection(visits: List<Visit>) {
                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Emerald600, modifier = Modifier.size(44.dp))
                         Spacer(modifier = Modifier.height(10.dp))
                         Text("No completed visit reports yet", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Submitted reports will appear here with 12h edit window", fontSize = 12.sp, color = Slate500)
                     }
                 }
             }
         } else {
             items(visits) { visit ->
+                val timeSinceSubmission = System.currentTimeMillis() - visit.updatedAt
+                val twelveHoursMillis = 12 * 60 * 60 * 1000L
+                val isEditable = timeSinceSubmission in 0..twelveHoursMillis
+                val remainingMillis = (twelveHoursMillis - timeSinceSubmission).coerceAtLeast(0L)
+                val remainingHours = remainingMillis / (1000 * 60 * 60)
+                val remainingMins = (remainingMillis / (1000 * 60)) % 60
+                val remainingText = if (isEditable) "${remainingHours}h ${remainingMins}m left" else "Window Closed"
+
+                val matchedSchool = remember(visit.schoolId, schools) {
+                    schools.find { it.schoolId == visit.schoolId }
+                }
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(visit.schoolName, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Navy900, modifier = Modifier.weight(1f))
+                            Text(
+                                text = visit.schoolName,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Navy900,
+                                modifier = Modifier.weight(1f)
+                            )
                             StatusChip(statusName = visit.status.name)
                         }
+
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("${visit.district} • ${visit.block}", fontSize = 12.sp, color = Slate500)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Submitted on: ${visit.visitDate}", fontSize = 12.sp, color = Slate700, fontWeight = FontWeight.Medium)
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Visit Date: ${visit.visitDate}", fontSize = 12.sp, color = Slate700, fontWeight = FontWeight.Medium)
+
+                            // 12-hour Window Badge
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isEditable) Color(0xFFF0FDF4) else Slate100
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isEditable) Icons.Default.Schedule else Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = if (isEditable) Emerald600 else Slate500,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isEditable) "Editable: $remainingText" else "12h Window Expired",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isEditable) Emerald600 else Slate500
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { selectedVisitForDetail = visit },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("View Details", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            Button(
+                                onClick = { onEditVisit(visit) },
+                                enabled = isEditable,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Indigo600,
+                                    disabledContainerColor = Slate100,
+                                    disabledContentColor = Slate500
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isEditable) "Edit Visit" else "Locked",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Detail View Dialog
+    selectedVisitForDetail?.let { visit ->
+        val timeSinceSubmission = System.currentTimeMillis() - visit.updatedAt
+        val twelveHoursMillis = 12 * 60 * 60 * 1000L
+        val isEditable = timeSinceSubmission in 0..twelveHoursMillis
+        val remainingMillis = (twelveHoursMillis - timeSinceSubmission).coerceAtLeast(0L)
+        val remainingHours = remainingMillis / (1000 * 60 * 60)
+        val remainingMins = (remainingMillis / (1000 * 60)) % 60
+        val remainingText = if (isEditable) "Editable • ${remainingHours}h ${remainingMins}m left" else "Window Expired"
+
+        val matchedSchool = remember(visit.schoolId, schools) {
+            schools.find { it.schoolId == visit.schoolId }
+        }
+
+        VisitDetailDialog(
+            visit = visit,
+            school = matchedSchool,
+            onDismiss = { selectedVisitForDetail = null },
+            isEditable = isEditable,
+            editTimeRemainingText = remainingText,
+            onEditClick = {
+                selectedVisitForDetail = null
+                onEditVisit(visit)
+            }
+        )
     }
 }
 

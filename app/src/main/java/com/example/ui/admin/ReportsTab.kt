@@ -46,24 +46,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.School
 import com.example.data.model.Visit
 import com.example.data.model.VisitAnswers
+import com.example.data.model.VisitStatus
 import com.example.ui.components.SearchTextField
 import com.example.ui.components.StatusChip
+import com.example.ui.components.VisitDetailDialog
 import com.example.ui.theme.Indigo600
 import com.example.ui.theme.Navy900
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
 import com.example.util.ExcelHelper
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-
-import com.example.data.model.VisitStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsTab(
     visits: List<Visit>,
+    schools: List<School> = emptyList(),
     initialStatusFilter: String = "All Statuses"
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -357,59 +357,16 @@ fun ReportsTab(
         }
     }
 
-    // Detailed Visit Answers Dialog
-    if (selectedVisitForDetails != null) {
-        val v = selectedVisitForDetails!!
-        val answers = remember(v) {
-            try {
-                Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build().adapter(VisitAnswers::class.java).fromJson(v.answersJson)
-            } catch (e: Exception) {
-                null
-            }
+    // Comprehensive Single-Page Aligned Visit Detail Dialog
+    selectedVisitForDetails?.let { visit ->
+        val matchedSchool = remember(visit.schoolId, schools) {
+            schools.find { it.schoolId == visit.schoolId }
         }
 
-        AlertDialog(
-            onDismissRequest = { selectedVisitForDetails = null },
-            title = { Text("Visit Report - ${v.schoolName}", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Field Officer: ${v.employeeName}", fontWeight = FontWeight.Bold, color = Indigo600)
-                    Text("Visit Date: ${v.visitDate}", fontSize = 12.sp, color = Slate500)
-
-                    if (answers != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        ReportAnswerItem("Met Principal?", answers.q9_metPrincipal)
-                        ReportAnswerItem("App Awareness", answers.q10_missionGyanAwareness)
-                        ReportAnswerItem("Student Count", answers.q11_studentCount)
-                        ReportAnswerItem("School Response", answers.q12_schoolResponse)
-                        ReportAnswerItem("WhatsApp Group Added", answers.q14_whatsappGroupAdded)
-                        ReportAnswerItem("Poster Installed", answers.q15_posterInstalled)
-                        ReportAnswerItem("Smart Class Status", answers.q21_smartClassStatus)
-                        ReportAnswerItem("Key Observations", answers.q16_keyObservations)
-                        ReportAnswerItem("Problems / Support Needed", answers.q17_problemsOrAssistance)
-                        ReportAnswerItem("Follow-up Required", answers.q18_followupRequired)
-                        ReportAnswerItem("Final Remarks", answers.q20_finalRemarks)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = { selectedVisitForDetails = null }) {
-                    Text("Close")
-                }
-            }
+        VisitDetailDialog(
+            visit = visit,
+            school = matchedSchool,
+            onDismiss = { selectedVisitForDetails = null }
         )
-    }
-}
-
-@Composable
-fun ReportAnswerItem(label: String, value: String) {
-    if (value.isNotBlank()) {
-        Column(modifier = Modifier.padding(vertical = 2.dp)) {
-            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Slate500)
-            Text(value, fontSize = 13.sp, color = Slate700)
-        }
     }
 }

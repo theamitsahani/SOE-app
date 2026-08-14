@@ -53,6 +53,7 @@ import com.example.data.model.Task
 import com.example.data.model.User
 import com.example.data.model.UserStatus
 import com.example.ui.components.StatusChip
+import com.example.ui.components.VisitDetailDialog
 import com.example.ui.theme.Indigo600
 import com.example.ui.theme.Navy900
 import com.example.ui.theme.Slate500
@@ -611,48 +612,15 @@ fun AssignVisitsTab(
         }
     }
 
-    if (selectedVisitForDetails != null) {
-        val v = selectedVisitForDetails!!
-        val answers = remember(v) {
-            try {
-                Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build().adapter(VisitAnswers::class.java).fromJson(v.answersJson)
-            } catch (e: Exception) {
-                null
-            }
+    selectedVisitForDetails?.let { visit ->
+        val matchedSchool = remember(visit.schoolId, schools) {
+            schools.find { it.schoolId == visit.schoolId }
         }
 
-        AlertDialog(
-            onDismissRequest = { selectedVisitForDetails = null },
-            title = { Text("Submitted Report - ${v.schoolName}", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Field Officer: ${v.employeeName}", fontWeight = FontWeight.Bold, color = Indigo600)
-                    Text("Visit Date: ${v.visitDate}", fontSize = 12.sp, color = Slate500)
-
-                    if (answers != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        ReportAnswerItem("Met Principal?", answers.q9_metPrincipal)
-                        ReportAnswerItem("App Knowledge", answers.q10_missionGyanAwareness)
-                        ReportAnswerItem("Student Attendance", answers.q11_studentCount)
-                        ReportAnswerItem("School Response", answers.q12_schoolResponse)
-                        ReportAnswerItem("WhatsApp Group", answers.q14_whatsappGroupAdded)
-                        ReportAnswerItem("Poster Installed", answers.q15_posterInstalled)
-                        ReportAnswerItem("Smart Class Status", answers.q21_smartClassStatus)
-                        ReportAnswerItem("Key Observations", answers.q16_keyObservations)
-                        ReportAnswerItem("Help Needed", answers.q17_problemsOrAssistance)
-                        ReportAnswerItem("Follow-up Needed", answers.q18_followupRequired)
-                        ReportAnswerItem("Final Remarks", answers.q20_finalRemarks)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = { selectedVisitForDetails = null }) {
-                    Text("Close")
-                }
-            }
+        VisitDetailDialog(
+            visit = visit,
+            school = matchedSchool,
+            onDismiss = { selectedVisitForDetails = null }
         )
     }
 }
