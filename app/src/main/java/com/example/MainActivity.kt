@@ -247,6 +247,7 @@ class MainActivity : ComponentActivity() {
                                         employeeUser = state.employeeUser,
                                         tasks = tasks.filter { it.employeeId == state.employeeUser.userId || it.employeeId == "emp_001" },
                                         completedVisits = visits.filter { it.employeeId == state.employeeUser.userId },
+                                        schools = schools,
                                         isOnline = isOnline,
                                         pendingSyncCount = pendingSyncCount,
                                         onSyncClick = {
