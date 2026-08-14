@@ -1,6 +1,8 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.util.Log
+import android.util.Patterns
 import com.example.data.local.AppDatabase
 import com.example.data.local.UserEntity
 import com.example.data.model.User
@@ -35,24 +37,45 @@ class AuthRepository(private val context: Context) {
             val fStore = firestore
             if (fStore != null) {
                 try {
+                    var userDoc: com.google.firebase.firestore.DocumentSnapshot? = null
                     val docTask = fStore.collection("users").document(uid).get()
                     val doc = com.google.android.gms.tasks.Tasks.await(docTask)
                     if (doc.exists()) {
-                        val roleStr = doc.getString("role") ?: UserRole.EMPLOYEE.name
-                        val statusStr = doc.getString("status") ?: UserStatus.ACTIVE.name
-                        val name = doc.getString("name") ?: currentFbUser.displayName ?: "User"
-                        val email = doc.getString("email") ?: userEmail
-                        val mobile = doc.getString("mobile") ?: ""
-                        val state = doc.getString("state") ?: "Rajasthan"
-                        val district = doc.getString("district") ?: ""
-
-                        val isAdminEmail = email.contains("admin", ignoreCase = true) || 
-                                           email.equals("amitsahani552@gmail.com", ignoreCase = true)
-                        val role = if (isAdminEmail || roleStr.equals(UserRole.ADMIN.name, ignoreCase = true)) {
-                            UserRole.ADMIN
-                        } else {
-                            try { UserRole.valueOf(roleStr) } catch (e: Exception) { UserRole.EMPLOYEE }
+                        userDoc = doc
+                    } else {
+                        val queryTask = fStore.collection("users").whereEqualTo("email", userEmail).limit(1).get()
+                        val querySnap = com.google.android.gms.tasks.Tasks.await(queryTask)
+                        if (!querySnap.isEmpty) {
+                            userDoc = querySnap.documents.firstOrNull()
                         }
+                    }
+
+                    if (userDoc != null && userDoc.exists()) {
+                        val statusStr = userDoc.getString("status")?.trim()?.uppercase() ?: UserStatus.ACTIVE.name
+                        if (statusStr == "INACTIVE") {
+                            fAuth.signOut()
+                            _currentUser.value = null
+                            return@withContext null
+                        }
+
+                        val rawRole = userDoc.getString("role")?.trim()?.uppercase()
+                        val role = when (rawRole) {
+                            "ADMIN" -> UserRole.ADMIN
+                            "EMPLOYEE" -> UserRole.EMPLOYEE
+                            else -> null
+                        }
+
+                        if (role == null) {
+                            fAuth.signOut()
+                            _currentUser.value = null
+                            return@withContext null
+                        }
+
+                        val name = userDoc.getString("name")?.takeIf { it.isNotBlank() } ?: currentFbUser.displayName ?: (if (role == UserRole.ADMIN) "Admin" else "Field Officer")
+                        val email = userDoc.getString("email") ?: userEmail
+                        val mobile = userDoc.getString("mobile") ?: ""
+                        val state = userDoc.getString("state") ?: "Rajasthan"
+                        val district = userDoc.getString("district") ?: ""
 
                         val user = User(
                             userId = uid,
@@ -62,50 +85,65 @@ class AuthRepository(private val context: Context) {
                             state = state,
                             district = district,
                             role = role,
-                            status = try { UserStatus.valueOf(statusStr) } catch (e: Exception) { UserStatus.ACTIVE }
+                            status = UserStatus.ACTIVE
                         )
 
-                        if (user.status == UserStatus.ACTIVE) {
-                            db.userDao().insertUser(
-                                UserEntity(
-                                    userId = user.userId,
-                                    name = user.name,
-                                    email = user.email,
-                                    mobile = user.mobile,
-                                    state = user.state,
-                                    district = user.district,
-                                    role = user.role.name,
-                                    status = user.status.name
-                                )
+                        db.userDao().insertUser(
+                            UserEntity(
+                                userId = user.userId,
+                                name = user.name,
+                                email = user.email,
+                                mobile = user.mobile,
+                                state = user.state,
+                                district = user.district,
+                                role = user.role.name,
+                                status = user.status.name
                             )
-                            _currentUser.value = user
-                            return@withContext user
-                        }
+                        )
+                        _currentUser.value = user
+                        return@withContext user
+                    } else {
+                        // User document does not exist in Firestore
+                        fAuth.signOut()
+                        _currentUser.value = null
+                        return@withContext null
                     }
                 } catch (e: Exception) {
-                    // Firestore fetch failed (e.g. offline), fallback to local cache
+                    Log.w("AuthRepository", "Failed to fetch session user profile from Firestore, checking local cache", e)
                 }
             }
 
             // 2. Fallback to local cache if offline
             val localUser = db.userDao().getUserById(uid)
-            if (localUser != null && localUser.status != UserStatus.INACTIVE.name) {
-                val user = User(
-                    userId = localUser.userId,
-                    name = localUser.name,
-                    email = localUser.email,
-                    mobile = localUser.mobile,
-                    state = localUser.state,
-                    district = localUser.district,
-                    role = try { UserRole.valueOf(localUser.role) } catch (e: Exception) { UserRole.EMPLOYEE },
-                    status = try { UserStatus.valueOf(localUser.status) } catch (e: Exception) { UserStatus.ACTIVE }
-                )
-                _currentUser.value = user
-                return@withContext user
+            if (localUser != null && localUser.status.uppercase() != "INACTIVE") {
+                val role = when (localUser.role.uppercase()) {
+                    "ADMIN" -> UserRole.ADMIN
+                    "EMPLOYEE" -> UserRole.EMPLOYEE
+                    else -> null
+                }
+                if (role != null) {
+                    val user = User(
+                        userId = localUser.userId,
+                        name = localUser.name,
+                        email = localUser.email,
+                        mobile = localUser.mobile,
+                        state = localUser.state,
+                        district = localUser.district,
+                        role = role,
+                        status = UserStatus.ACTIVE
+                    )
+                    _currentUser.value = user
+                    return@withContext user
+                }
             }
 
+            fAuth.signOut()
+            _currentUser.value = null
             null
         } catch (e: Exception) {
+            Log.e("AuthRepository", "Error checking current session", e)
+            firebaseAuth?.signOut()
+            _currentUser.value = null
             null
         }
     }
@@ -113,91 +151,76 @@ class AuthRepository(private val context: Context) {
     suspend fun login(emailOrUserId: String, password: String): Result<User> = withContext(Dispatchers.IO) {
         try {
             val input = emailOrUserId.trim()
-            if (input.isBlank() || password.isBlank()) {
-                return@withContext Result.failure(Exception("Please enter your email and password."))
+            if (input.isBlank()) {
+                return@withContext Result.failure(Exception("Please enter your email address."))
+            }
+            if (!Patterns.EMAIL_ADDRESS.matcher(input).matches()) {
+                return@withContext Result.failure(Exception("Please enter a valid email address."))
+            }
+            if (password.isBlank()) {
+                return@withContext Result.failure(Exception("Please enter your password."))
             }
 
-            val fAuth = firebaseAuth ?: return@withContext Result.failure(Exception("Firebase Auth is not available."))
-            val fStore = firestore
+            val fAuth = firebaseAuth ?: return@withContext Result.failure(Exception("Internet connection unavailable. Please try again."))
+            val fStore = firestore ?: return@withContext Result.failure(Exception("Internet connection unavailable. Please try again."))
 
-            // Perform real Firebase Authentication
+            // 1. Perform Firebase Authentication
             val authTask = fAuth.signInWithEmailAndPassword(input, password)
             val authResult = com.google.android.gms.tasks.Tasks.await(authTask)
-            val fbUser = authResult.user ?: return@withContext Result.failure(Exception("User not found."))
+            val fbUser = authResult.user ?: run {
+                fAuth.signOut()
+                return@withContext Result.failure(Exception("User profile not found. Please contact administrator."))
+            }
             val uid = fbUser.uid
             val userEmail = fbUser.email ?: input
 
-            // Determine admin eligibility
-            val isAdminEmail = userEmail.contains("admin", ignoreCase = true) || 
-                               userEmail.equals("amitsahani552@gmail.com", ignoreCase = true)
-
-            // Fetch user profile from Firestore if online/available
-            var role = if (isAdminEmail) UserRole.ADMIN else UserRole.EMPLOYEE
-            var status = UserStatus.ACTIVE
-            var name = if (isAdminEmail) "Admin" else (fbUser.displayName ?: "Field Officer")
-            var mobile = ""
-            var state = "Rajasthan"
-            var district = ""
-
-            if (fStore != null) {
-                try {
-                    val docTask = fStore.collection("users").document(uid).get()
-                    val doc = com.google.android.gms.tasks.Tasks.await(docTask)
-
-                    if (doc.exists()) {
-                        val roleStr = doc.getString("role") ?: (if (isAdminEmail) UserRole.ADMIN.name else UserRole.EMPLOYEE.name)
-                        val statusStr = doc.getString("status") ?: UserStatus.ACTIVE.name
-                        
-                        role = if (isAdminEmail || roleStr.equals(UserRole.ADMIN.name, ignoreCase = true)) {
-                            UserRole.ADMIN
-                        } else {
-                            try { UserRole.valueOf(roleStr) } catch (e: Exception) { UserRole.EMPLOYEE }
-                        }
-                        
-                        status = try { UserStatus.valueOf(statusStr) } catch (e: Exception) { UserStatus.ACTIVE }
-                        name = doc.getString("name") ?: name
-                        mobile = doc.getString("mobile") ?: ""
-                        state = doc.getString("state") ?: "Rajasthan"
-                        district = doc.getString("district") ?: ""
-
-                        // Sync updated role back if it was upgraded to ADMIN
-                        if (isAdminEmail && roleStr != UserRole.ADMIN.name) {
-                            fStore.collection("users").document(uid).update("role", UserRole.ADMIN.name)
-                        }
-                    } else {
-                        // If document doesn't exist yet (e.g. initial account login):
-                        fStore.collection("users").document(uid).set(
-                            mapOf(
-                                "userId" to uid,
-                                "name" to name,
-                                "email" to userEmail,
-                                "mobile" to mobile,
-                                "state" to state,
-                                "district" to district,
-                                "role" to role.name,
-                                "status" to status.name,
-                                "createdAt" to System.currentTimeMillis()
-                            )
-                        )
+            // 2. Fetch users/{UID} document from Firestore
+            var userDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+            try {
+                val docTask = fStore.collection("users").document(uid).get()
+                val doc = com.google.android.gms.tasks.Tasks.await(docTask)
+                if (doc.exists()) {
+                    userDoc = doc
+                } else {
+                    val queryTask = fStore.collection("users").whereEqualTo("email", userEmail).limit(1).get()
+                    val querySnap = com.google.android.gms.tasks.Tasks.await(queryTask)
+                    if (!querySnap.isEmpty) {
+                        userDoc = querySnap.documents.firstOrNull()
                     }
-                } catch (e: Exception) {
-                    // Fallback to local cached profile if offline
-                    val local = db.userDao().getUserById(uid)
-                    if (local != null) {
-                        role = if (isAdminEmail) UserRole.ADMIN else try { UserRole.valueOf(local.role) } catch (ex: Exception) { UserRole.EMPLOYEE }
-                        status = try { UserStatus.valueOf(local.status) } catch (ex: Exception) { UserStatus.ACTIVE }
-                        name = local.name
-                        mobile = local.mobile
-                        state = local.state
-                        district = local.district
-                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AuthRepository", "Error reading user document from Firestore", e)
+                fAuth.signOut()
+                return@withContext Result.failure(Exception(mapAuthErrorToUserMessage(e)))
+            }
+
+            if (userDoc == null || !userDoc.exists()) {
+                fAuth.signOut()
+                return@withContext Result.failure(Exception("User profile not found. Please contact administrator."))
+            }
+
+            // 3. Check status field
+            val statusStr = userDoc.getString("status")?.trim()?.uppercase() ?: UserStatus.ACTIVE.name
+            if (statusStr == "INACTIVE") {
+                fAuth.signOut()
+                return@withContext Result.failure(Exception("Your account is inactive. Please contact administrator."))
+            }
+
+            // 4. Check role field
+            val rawRole = userDoc.getString("role")?.trim()?.uppercase()
+            val role: UserRole = when (rawRole) {
+                "ADMIN" -> UserRole.ADMIN
+                "EMPLOYEE" -> UserRole.EMPLOYEE
+                else -> {
+                    fAuth.signOut()
+                    return@withContext Result.failure(Exception("User profile not found. Please contact administrator."))
                 }
             }
 
-            if (status == UserStatus.INACTIVE) {
-                fAuth.signOut()
-                return@withContext Result.failure(Exception("This account is inactive. Please contact your Admin."))
-            }
+            val name = userDoc.getString("name")?.takeIf { it.isNotBlank() } ?: fbUser.displayName ?: (if (role == UserRole.ADMIN) "Admin" else "Field Officer")
+            val mobile = userDoc.getString("mobile") ?: ""
+            val state = userDoc.getString("state") ?: "Rajasthan"
+            val district = userDoc.getString("district") ?: ""
 
             val authenticatedUser = User(
                 userId = uid,
@@ -207,7 +230,7 @@ class AuthRepository(private val context: Context) {
                 state = state,
                 district = district,
                 role = role,
-                status = status
+                status = UserStatus.ACTIVE
             )
 
             // Cache in local database without password
@@ -226,9 +249,86 @@ class AuthRepository(private val context: Context) {
 
             _currentUser.value = authenticatedUser
             Result.success(authenticatedUser)
-        } catch (e: Exception) {
-            val message = e.localizedMessage ?: "Authentication failed"
-            Result.failure(Exception(message))
+        } catch (e: Throwable) {
+            firebaseAuth?.signOut()
+            val userFriendlyMessage = mapAuthErrorToUserMessage(e)
+            Result.failure(Exception(userFriendlyMessage))
+        }
+    }
+
+    private fun mapAuthErrorToUserMessage(e: Throwable): String {
+        // Log the complete technical error and stack trace ONLY in Logcat for debugging
+        Log.e("AuthRepository", "Authentication failure encountered", e)
+
+        val rootCause = e.cause ?: e
+        val rawMessage = (rootCause.message ?: "").lowercase()
+        val className = rootCause::class.java.simpleName
+
+        return when {
+            // Explicit business rules
+            rawMessage.contains("your account is inactive") || rawMessage.contains("account is inactive") -> {
+                "Your account is inactive. Please contact administrator."
+            }
+            rawMessage.contains("user profile not found") -> {
+                "User profile not found. Please contact administrator."
+            }
+            rawMessage.contains("please enter a valid email") -> {
+                "Please enter a valid email address."
+            }
+            rawMessage.contains("please enter your email") -> {
+                "Please enter your email address."
+            }
+            rawMessage.contains("please enter your password") -> {
+                "Please enter your password."
+            }
+
+            // Invalid Email Format from Firebase
+            rawMessage.contains("badly formatted") ||
+            rawMessage.contains("invalid email") ||
+            rawMessage.contains("invalid_email") ||
+            rawMessage.contains("the email address is badly formatted") ||
+            className.contains("FirebaseAuthInvalidCredentialsException") && rawMessage.contains("email") -> {
+                "Please enter a valid email address."
+            }
+
+            // Invalid Credentials / Incorrect Password / User Not Found
+            rawMessage.contains("invalid_credential") ||
+            rawMessage.contains("invalid-credential") ||
+            rawMessage.contains("wrong_password") ||
+            rawMessage.contains("wrong password") ||
+            rawMessage.contains("user_not_found") ||
+            rawMessage.contains("user not found") ||
+            rawMessage.contains("no user record") ||
+            rawMessage.contains("the supplied auth credential is incorrect") ||
+            rawMessage.contains("password is invalid") ||
+            className.contains("FirebaseAuthInvalidCredentialsException") ||
+            className.contains("FirebaseAuthInvalidUserException") -> {
+                "Invalid login details."
+            }
+
+            // Network / Connection Issues
+            rawMessage.contains("network") ||
+            rawMessage.contains("connection") ||
+            rawMessage.contains("unable to resolve host") ||
+            rawMessage.contains("timeout") ||
+            rawMessage.contains("unreachable") ||
+            className.contains("FirebaseNetworkException") ||
+            rootCause is java.io.IOException ||
+            rootCause is java.net.UnknownHostException ||
+            rootCause is java.net.SocketTimeoutException ||
+            rootCause is java.net.ConnectException -> {
+                "Internet connection unavailable. Please try again."
+            }
+
+            // User Disabled / Inactive by Firebase Admin
+            rawMessage.contains("user_disabled") || rawMessage.contains("user disabled") -> {
+                "Your account is inactive. Please contact administrator."
+            }
+
+            // Generic Fallback
+            else -> {
+                "Unable to login. Please try again."
+            }
         }
     }
 
