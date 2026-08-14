@@ -132,12 +132,16 @@ object ExcelHelper {
                     continue
                 }
 
-                val isDuplicate = existingNames.contains(schoolName.lowercase())
+                val existingSchool = existingSchools.find { 
+                    it.schoolName.trim().equals(schoolName.trim(), ignoreCase = true) && 
+                    (districtName.isBlank() || it.districtName.trim().equals(districtName.trim(), ignoreCase = true))
+                }
+                val isDuplicate = existingSchool != null
                 if (isDuplicate) {
                     duplicateRows++
                 }
 
-                val schoolId = "sch_" + UUID.randomUUID().toString().take(8)
+                val schoolId = existingSchool?.schoolId ?: ("sch_" + Math.abs((schoolName.trim().lowercase() + "_" + districtName.trim().lowercase()).hashCode()).toString(36))
 
                 val school = School(
                     schoolId = schoolId,

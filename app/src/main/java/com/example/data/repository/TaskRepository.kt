@@ -15,48 +15,51 @@ class TaskRepository(private val context: Context) {
     private val db = AppDatabase.getDatabase(context)
     private val firestore get() = FirebaseUtils.firestore
 
-    suspend fun seedDefaultTasks() = withContext(Dispatchers.IO) {
-        val sampleTask1 = Task(
-            taskId = "tsk_001",
-            visitId = "vst_102",
-            schoolId = "sch_002",
-            employeeId = "emp_001",
-            employeeName = "Ramesh Kumar",
-            schoolName = "Government Mahatma Gandhi English Medium School (9123842)",
-            district = "JAIPUR",
-            block = "AMER",
-            assignedBy = "Mission Gyan Admin",
-            visitDate = "14-Aug-2026",
-            status = VisitStatus.ASSIGNED,
-            notes = "Conduct smart class demonstration and check Mission Gyan poster installation."
-        )
-
-        val sampleTask2 = Task(
-            taskId = "tsk_002",
-            visitId = "vst_103",
-            schoolId = "sch_003",
-            employeeId = "emp_001",
-            employeeName = "Ramesh Kumar",
-            schoolName = "Govt Secondary School Soorsagar (7612349)",
-            district = "JODHPUR",
-            block = "JODHPUR URBAN",
-            assignedBy = "Mission Gyan Admin",
-            visitDate = "18-Aug-2026",
-            status = VisitStatus.ASSIGNED,
-            notes = "Interact with Principal Sir and verify SMC WhatsApp group status."
-        )
-
-        if (db.taskDao().getTaskById("tsk_001") == null) {
-            db.taskDao().insertTask(sampleTask1)
-        }
-        if (db.taskDao().getTaskById("tsk_002") == null) {
-            db.taskDao().insertTask(sampleTask2)
-        }
-    }
-
     fun getAllTasks(): Flow<List<Task>> = db.taskDao().getAllTasks()
 
     fun getTasksByEmployee(employeeId: String): Flow<List<Task>> = db.taskDao().getTasksByEmployee(employeeId)
+
+    suspend fun syncTasksFromFirestore(): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val fStore = firestore ?: return@withContext Result.failure(Exception("Firestore not initialized"))
+            val snapshotTask = fStore.collection("tasks").get()
+            val snapshot = com.google.android.gms.tasks.Tasks.await(snapshotTask)
+
+            val tasks = snapshot.documents.mapNotNull { doc ->
+                val taskId = doc.getString("taskId") ?: doc.id
+                val schoolId = doc.getString("schoolId") ?: ""
+                val employeeId = doc.getString("employeeId") ?: ""
+                val schoolName = doc.getString("schoolName") ?: ""
+                if (schoolName.isBlank()) return@mapNotNull null
+
+                val statusStr = doc.getString("status") ?: VisitStatus.ASSIGNED.name
+                val status = try { VisitStatus.valueOf(statusStr) } catch (e: Exception) { VisitStatus.ASSIGNED }
+
+                Task(
+                    taskId = taskId,
+                    visitId = doc.getString("visitId") ?: "",
+                    schoolId = schoolId,
+                    employeeId = employeeId,
+                    employeeName = doc.getString("employeeName") ?: "",
+                    schoolName = schoolName,
+                    district = doc.getString("district") ?: "",
+                    block = doc.getString("block") ?: "",
+                    assignedBy = doc.getString("assignedBy") ?: "Admin",
+                    visitDate = doc.getString("visitDate") ?: "",
+                    status = status,
+                    notes = doc.getString("notes") ?: "",
+                    createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                )
+            }
+
+            if (tasks.isNotEmpty()) {
+                db.taskDao().insertTasks(tasks)
+            }
+            Result.success(tasks.size)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     suspend fun assignTask(
         schoolId: String,

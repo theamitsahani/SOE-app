@@ -95,10 +95,20 @@ class MainActivity : ComponentActivity() {
                     val scope = rememberCoroutineScope()
 
                     LaunchedEffect(Unit) {
-                        authRepository.initializeDefaultAccounts()
-                        schoolRepository.seedDefaultSchools()
-                        visitRepository.seedDefaultVisits()
-                        taskRepository.seedDefaultTasks()
+                        val sessionUser = authRepository.checkCurrentSession()
+                        if (sessionUser != null) {
+                            currentScreen = if (sessionUser.role == UserRole.ADMIN) {
+                                ScreenState.Admin(sessionUser)
+                            } else {
+                                ScreenState.Employee(sessionUser)
+                            }
+                        }
+
+                        // Background sync data from Firestore into local cache
+                        launch { schoolRepository.syncSchoolsFromFirestore() }
+                        launch { visitRepository.syncVisitsFromFirestore() }
+                        launch { taskRepository.syncTasksFromFirestore() }
+
                         syncManager.checkPendingCount()
                         isInitializing = false
                     }
@@ -248,7 +258,7 @@ class MainActivity : ComponentActivity() {
                                 is ScreenState.Employee -> {
                                     EmployeeMainScreen(
                                         employeeUser = state.employeeUser,
-                                        tasks = tasks.filter { it.employeeId == state.employeeUser.userId || it.employeeId == "emp_001" },
+                                        tasks = tasks.filter { it.employeeId == state.employeeUser.userId },
                                         completedVisits = visits.filter { it.employeeId == state.employeeUser.userId },
                                         schools = schools,
                                         isOnline = isOnline,

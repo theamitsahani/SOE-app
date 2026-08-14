@@ -93,6 +93,48 @@ object MediaStorageHelper {
     }
 
     /**
+     * Generates structured Google Drive folder path:
+     * SOE VISIT / State / District / Block / School Name / Visit Date /
+     */
+    fun getDriveFolderPath(
+        state: String,
+        district: String,
+        block: String,
+        schoolName: String,
+        visitDate: String
+    ): String {
+        fun sanitize(s: String) = s.replace("/", "-").replace("\\", "-").trim().ifBlank { "Unknown" }
+        val sState = sanitize(state.ifBlank { "Rajasthan" })
+        val sDistrict = sanitize(district)
+        val sBlock = sanitize(block)
+        val sSchool = sanitize(schoolName)
+        val sDate = sanitize(visitDate)
+
+        return "SOE VISIT/$sState/$sDistrict/$sBlock/$sSchool/$sDate"
+    }
+
+    /**
+     * Generates standardized filename for each photo category:
+     * 1. School Photo -> School_Photo.jpg
+     * 2. Explaining Our App -> Explaining_App.jpg
+     * 3. Students Using Smart Board -> Smart_Board.jpg
+     * 4. Photo With Principal Sir -> Principal.jpg
+     * 5. Letter Photo -> Letter.jpg
+     * 6. Other Photos -> Other_01.jpg, Other_02.jpg...
+     */
+    fun getStandardizedFileName(categoryId: String, index: Int, extension: String = "jpg"): String {
+        val ext = extension.trimStart('.')
+        return when (categoryId.lowercase()) {
+            "school_photo" -> "School_Photo.$ext"
+            "explaining_app" -> "Explaining_App.$ext"
+            "students_smart_board" -> "Smart_Board.$ext"
+            "principal_photo" -> "Principal.$ext"
+            "letter_photo" -> "Letter.$ext"
+            else -> "Other_${String.format("%02d", index + 1)}.$ext"
+        }
+    }
+
+    /**
      * Launches a viewer or system player for photo/video.
      */
     fun openMedia(context: Context, pathOrUrl: String) {

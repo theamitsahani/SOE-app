@@ -238,11 +238,6 @@ fun EmployeeManagementTab(
                         }
                     }
 
-                    // Password
-                    if (emp.password.isNotBlank()) {
-                        DetailItem(label = "Login Password (पासवर्ड)", value = emp.password)
-                    }
-
                     // Toggle Status Option
                     Row(
                         modifier = Modifier
@@ -300,7 +295,6 @@ fun EmployeeManagementTab(
         var mobile by remember { mutableStateOf("") }
         var state by remember { mutableStateOf("Rajasthan") }
         var district by remember { mutableStateOf("Jaipur") }
-        var password by remember { mutableStateOf("emp123") }
         var isSaving by remember { mutableStateOf(false) }
 
         AlertDialog(
@@ -349,14 +343,6 @@ fun EmployeeManagementTab(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Login Password (पासवर्ड)", fontSize = 11.sp) },
-                        trailingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             },
             confirmButton = {
@@ -370,7 +356,6 @@ fun EmployeeManagementTab(
                             mobile = mobile.trim(),
                             state = state.trim().ifBlank { "Rajasthan" },
                             district = district.trim(),
-                            password = password.trim().ifBlank { "emp123" },
                             role = UserRole.EMPLOYEE,
                             status = UserStatus.ACTIVE
                         )
@@ -402,7 +387,6 @@ fun EmployeeManagementTab(
         var mobile by remember { mutableStateOf(emp.mobile) }
         var state by remember { mutableStateOf(emp.state.ifBlank { "Rajasthan" }) }
         var district by remember { mutableStateOf(emp.district) }
-        var password by remember { mutableStateOf(emp.password.ifBlank { "emp123" }) }
         var status by remember { mutableStateOf(emp.status) }
         var isSaving by remember { mutableStateOf(false) }
 
@@ -452,14 +436,6 @@ fun EmployeeManagementTab(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Account Password", fontSize = 11.sp) },
-                        trailingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -487,7 +463,6 @@ fun EmployeeManagementTab(
                             mobile = mobile.trim(),
                             state = state.trim(),
                             district = district.trim(),
-                            password = password.trim(),
                             status = status
                         )
                         onSaveEmployee(updated) {
