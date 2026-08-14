@@ -28,6 +28,9 @@ interface SchoolDao {
     @Update
     suspend fun updateSchool(school: School)
 
+    @Query("DELETE FROM schools WHERE schoolId = :schoolId")
+    suspend fun deleteSchoolById(schoolId: String)
+
     @Query("DELETE FROM schools")
     suspend fun clearSchools()
 }

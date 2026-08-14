@@ -158,4 +158,17 @@ class SchoolRepository(private val context: Context) {
             Result.failure(e)
         }
     }
+
+    /**
+     * Deletes a school record by its ID from local database and Firestore.
+     */
+    suspend fun deleteSchool(schoolId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            db.schoolDao().deleteSchoolById(schoolId)
+            firestore?.collection("schools")?.document(schoolId)?.delete()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

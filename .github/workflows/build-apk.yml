@@ -42,9 +42,9 @@ jobs:
       - name: Build Debug APK
         run: |
           if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --stacktrace
+            ./gradlew assembleDebug --stacktrace --no-daemon -Dorg.gradle.configuration-cache=false
           else
-            gradle assembleDebug --stacktrace
+            gradle assembleDebug --stacktrace --no-daemon -Dorg.gradle.configuration-cache=false
           fi
 
       - name: Upload APK

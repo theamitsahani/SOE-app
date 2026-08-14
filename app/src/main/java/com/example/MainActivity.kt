@@ -192,6 +192,9 @@ class MainActivity : ComponentActivity() {
                                                     },
                                                     onUpdateSchool = { sch ->
                                                         scope.launch { schoolRepository.updateSchoolRecord(sch) }
+                                                    },
+                                                    onDeleteSchool = { schoolId ->
+                                                        scope.launch { schoolRepository.deleteSchool(schoolId) }
                                                     }
                                                 )
                                             }

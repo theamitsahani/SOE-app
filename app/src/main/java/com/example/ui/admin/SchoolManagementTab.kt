@@ -2,6 +2,7 @@ package com.example.ui.admin
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -15,25 +16,35 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +72,7 @@ import com.example.ui.theme.Emerald600
 import com.example.ui.theme.Indigo600
 import com.example.ui.theme.Navy900
 import com.example.ui.theme.Red600
+import com.example.ui.theme.Slate100
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
 import com.example.util.ExcelHelper
@@ -70,7 +82,8 @@ import com.example.util.ImportValidationResult
 fun SchoolManagementTab(
     schools: List<School>,
     onImportSchools: (List<School>, List<com.example.data.model.Visit>, (Result<Int>) -> Unit) -> Unit,
-    onUpdateSchool: (School) -> Unit
+    onUpdateSchool: (School) -> Unit,
+    onDeleteSchool: (String) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedSchoolForEdit by remember { mutableStateOf<School?>(null) }
@@ -187,7 +200,7 @@ fun SchoolManagementTab(
         }
     }
 
-    // Edit School Dialog - 9 Fields in Exact Order
+    // Edit School Dialog - 9 Fields in Exact Order + Delete Option
     if (selectedSchoolForEdit != null) {
         val sch = selectedSchoolForEdit!!
         var eStateName by remember { mutableStateOf(sch.stateName) }
@@ -199,10 +212,55 @@ fun SchoolManagementTab(
         var eBlockName by remember { mutableStateOf(sch.blockName) }
         var ePrincipalMobile by remember { mutableStateOf(sch.principalMobile) }
         var eVisitDate by remember { mutableStateOf(sch.visitDate) }
+        var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+        if (showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmDialog = false },
+                icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Red600, modifier = Modifier.size(32.dp)) },
+                title = { Text("Delete School Record? (स्कूल हटाएं?)", fontWeight = FontWeight.Bold, color = Navy900) },
+                text = {
+                    Text(
+                        "Are you sure you want to permanently delete \"${sch.schoolName}\"? This school will be removed from your directory.",
+                        fontSize = 13.sp,
+                        color = Slate700
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            onDeleteSchool(sch.schoolId)
+                            Toast.makeText(context, "School deleted: ${sch.schoolName}", Toast.LENGTH_SHORT).show()
+                            showDeleteConfirmDialog = false
+                            selectedSchoolForEdit = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Red600)
+                    ) {
+                        Text("Delete (हटाएं)")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
 
         AlertDialog(
             onDismissRequest = { selectedSchoolForEdit = null },
-            title = { Text("Edit School Record (स्कूल संपादित करें)", fontWeight = FontWeight.Bold, color = Navy900) },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Edit School (संपादित करें)", fontWeight = FontWeight.Bold, color = Navy900, fontSize = 17.sp)
+                    IconButton(onClick = { showDeleteConfirmDialog = true }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete School", tint = Red600)
+                    }
+                }
+            },
             text = {
                 Column(
                     modifier = Modifier
@@ -282,6 +340,18 @@ fun SchoolManagementTab(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { showDeleteConfirmDialog = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Red600),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Delete School (स्कूल डिलीट करें)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             confirmButton = {
@@ -300,6 +370,7 @@ fun SchoolManagementTab(
                                 visitDate = eVisitDate
                             )
                         )
+                        Toast.makeText(context, "School updated successfully", Toast.LENGTH_SHORT).show()
                         selectedSchoolForEdit = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
@@ -454,38 +525,222 @@ fun SchoolManagementTab(
         )
     }
 
-    // Import Excel Preview & Validation Dialog
+    // Import Excel Preview & Validation Dialog with Detailed Valid Schools Preview
     if (importValidationResult != null) {
         val res = importValidationResult!!
+        var previewSearchQuery by remember { mutableStateOf("") }
+        val previewFiltered = remember(res.schoolsToImport, previewSearchQuery) {
+            if (previewSearchQuery.isBlank()) res.schoolsToImport
+            else res.schoolsToImport.filter {
+                it.schoolName.contains(previewSearchQuery, ignoreCase = true) ||
+                        it.districtName.contains(previewSearchQuery, ignoreCase = true) ||
+                        it.blockName.contains(previewSearchQuery, ignoreCase = true) ||
+                        it.villageName.contains(previewSearchQuery, ignoreCase = true) ||
+                        it.principalName.contains(previewSearchQuery, ignoreCase = true) ||
+                        it.principalMobile.contains(previewSearchQuery, ignoreCase = true)
+            }
+        }
 
         AlertDialog(
-            onDismissRequest = { importValidationResult = null },
-            title = { Text("Excel Import Validation Summary", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            onDismissRequest = { if (!isImporting) importValidationResult = null },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Column {
+                        Text("Excel Import Preview", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Navy900)
+                        Text("वैध स्कूलों का पूर्वावलोकन", fontSize = 11.sp, color = Slate500)
+                    }
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFF1F5F9),
+                        color = Emerald100
+                    ) {
+                        Text(
+                            text = "${res.validRows} Valid",
+                            color = Emerald600,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Summary Banner
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFF8FAFC),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text("• Total File Rows: ${res.totalRows}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text("• Valid Rows to Import: ${res.validRows}", color = Emerald600, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("• Duplicates Flagged: ${res.duplicateRows}", color = Slate700, fontSize = 13.sp)
-                            Text("• Invalid / Skipped Rows: ${res.invalidRows}", color = Red600, fontSize = 13.sp)
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Total File Rows: ${res.totalRows}", fontSize = 12.sp, color = Slate700)
+                                Text("Valid Schools: ${res.validRows}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Emerald600)
+                            }
+                            if (res.duplicateRows > 0) {
+                                Text("Duplicates Flagged: ${res.duplicateRows}", fontSize = 11.sp, color = Slate500)
+                            }
+                            if (res.invalidRows > 0) {
+                                Text("Skipped (Empty Name): ${res.invalidRows}", fontSize = 11.sp, color = Red600, fontWeight = FontWeight.Medium)
+                            }
                             if (res.completedVisitsToImport.isNotEmpty()) {
-                                Text("• Completed Visits Flagged (Col I/J): ${res.completedVisitsToImport.size}", color = Indigo600, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("Completed Visits Included: ${res.completedVisitsToImport.size}", fontSize = 11.sp, color = Indigo600, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
 
+                    // Section Title
+                    Text(
+                        text = "Parsed Valid Schools (${res.schoolsToImport.size}):",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Navy900
+                    )
+
+                    // Optional Search if there are many schools
+                    if (res.schoolsToImport.size > 5) {
+                        OutlinedTextField(
+                            value = previewSearchQuery,
+                            onValueChange = { previewSearchQuery = it },
+                            placeholder = { Text("Filter preview list...", fontSize = 12.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+
+                    // Valid Schools Preview Cards List
+                    if (previewFiltered.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF1F5F9),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "No valid schools found in preview matching filter.",
+                                fontSize = 12.sp,
+                                color = Slate500,
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
+                    } else {
+                        previewFiltered.forEachIndexed { idx, school ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color.White,
+                                shadowElevation = 1.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = "${idx + 1}. ${school.schoolName}",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Navy900,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (school.schoolType.isNotBlank()) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Slate100
+                                            ) {
+                                                Text(
+                                                    text = school.schoolType,
+                                                    fontSize = 10.sp,
+                                                    color = Indigo600,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    // Location Details (Village, Block, District, State)
+                                    val loc = listOfNotNull(
+                                        school.villageName.takeIf { it.isNotBlank() }?.let { "Village: $it" },
+                                        school.blockName.takeIf { it.isNotBlank() }?.let { "Block: $it" },
+                                        school.districtName.takeIf { it.isNotBlank() }?.let { "Dist: $it" },
+                                        school.stateName.takeIf { it.isNotBlank() && it != "Rajasthan" }?.let { "State: $it" }
+                                    ).joinToString(" • ")
+
+                                    if (loc.isNotBlank()) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Slate500, modifier = Modifier.size(12.dp))
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(loc, fontSize = 11.sp, color = Slate500)
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    // Principal Details (Name & Mobile)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Person, contentDescription = null, tint = Slate700, modifier = Modifier.size(12.dp))
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text("Principal: ${school.principalName.ifBlank { "N/A" }}", fontSize = 11.sp, color = Slate700, fontWeight = FontWeight.Medium)
+                                        }
+
+                                        if (school.principalMobile.isNotBlank() && school.principalMobile != "N/A") {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Phone, contentDescription = null, tint = Indigo600, modifier = Modifier.size(11.dp))
+                                                Spacer(modifier = Modifier.width(2.dp))
+                                                Text(school.principalMobile, fontSize = 11.sp, color = Indigo600, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+
+                                    if (school.visitDate.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("Scheduled Date: ${school.visitDate}", fontSize = 10.sp, color = Slate500)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Skipped rows note if any
                     if (res.errors.isNotEmpty()) {
-                        Text("Skipped Row Details:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Red600)
-                        res.errors.take(5).forEach { err ->
-                            Text("• $err", fontSize = 11.sp, color = Slate700)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFEF2F2),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = Red600, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Skipped / Invalid Rows (${res.errors.size}):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Red600)
+                                }
+                                res.errors.take(3).forEach { err ->
+                                    Text("• $err", fontSize = 10.sp, color = Red600)
+                                }
+                                if (res.errors.size > 3) {
+                                    Text("...and ${res.errors.size - 3} more", fontSize = 10.sp, color = Red600)
+                                }
+                            }
                         }
                     }
                 }
@@ -494,18 +749,33 @@ fun SchoolManagementTab(
                 Button(
                     onClick = {
                         isImporting = true
-                        onImportSchools(res.schoolsToImport, res.completedVisitsToImport) {
+                        onImportSchools(res.schoolsToImport, res.completedVisitsToImport) { importRes ->
                             isImporting = false
+                            if (importRes.isSuccess) {
+                                Toast.makeText(context, "${res.schoolsToImport.size} schools imported successfully!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Import failed: ${importRes.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
+                            }
                             importValidationResult = null
                         }
                     },
-                    enabled = !isImporting && res.schoolsToImport.isNotEmpty()
+                    enabled = !isImporting && res.schoolsToImport.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
                 ) {
-                    Text("Confirm Import (${res.schoolsToImport.size} Schools)")
+                    if (isImporting) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Importing...")
+                    } else {
+                        Text("Confirm Import (${res.schoolsToImport.size} Schools)")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { importValidationResult = null }) {
+                TextButton(
+                    onClick = { importValidationResult = null },
+                    enabled = !isImporting
+                ) {
                     Text("Cancel")
                 }
             }
