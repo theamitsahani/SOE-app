@@ -11,6 +11,8 @@ jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_RUNNER_FORCE_NODE24: "true"
 
     steps:
       - name: Checkout Repository
@@ -45,7 +47,7 @@ jobs:
           if [ ! -f "./gradlew" ]; then
             GRADLE_CMD="gradle"
           fi
-          $GRADLE_CMD assembleDebug --stacktrace --no-daemon -Dorg.gradle.configuration-cache=false -Dksp.incremental=false -Dksp.use.ksp2=true
+          $GRADLE_CMD assembleDebug --stacktrace --no-daemon -Dorg.gradle.configuration-cache=false -Dksp.incremental=false
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

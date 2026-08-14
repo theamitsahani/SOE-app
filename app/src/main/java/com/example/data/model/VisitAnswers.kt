@@ -1,8 +1,5 @@
 package com.example.data.model
 
-import com.squareup.moshi.JsonClass
-
-@JsonClass(generateAdapter = true)
 data class VisitAnswers(
     val q1_soeName: String = "",
     val q2_visitDate: String = "",
