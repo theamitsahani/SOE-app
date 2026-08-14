@@ -402,6 +402,24 @@ class AuthRepository(private val context: Context) {
         }
     }
 
+    suspend fun sendPasswordResetEmail(email: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val trimmedEmail = email.trim()
+            if (trimmedEmail.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                return@withContext Result.failure(Exception("Please provide a valid email address."))
+            }
+
+            val fAuth = firebaseAuth ?: return@withContext Result.failure(Exception("Internet connection unavailable. Please try again."))
+            val task = fAuth.sendPasswordResetEmail(trimmedEmail)
+            com.google.android.gms.tasks.Tasks.await(task)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Log.e("AuthRepository", "Failed to send password reset email to $email", e)
+            val friendlyMsg = mapAuthErrorToUserMessage(e)
+            Result.failure(Exception(friendlyMsg))
+        }
+    }
+
     suspend fun saveEmployee(user: User): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val entity = UserEntity(

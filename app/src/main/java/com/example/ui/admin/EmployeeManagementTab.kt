@@ -67,6 +67,7 @@ import com.example.ui.components.SearchTextField
 import com.example.ui.components.StatusChip
 import com.example.ui.theme.Indigo600
 import com.example.ui.theme.Navy900
+import com.example.ui.theme.Red600
 import com.example.ui.theme.Slate100
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
@@ -75,12 +76,16 @@ import java.util.UUID
 @Composable
 fun EmployeeManagementTab(
     employees: List<User>,
-    onSaveEmployee: (User, (Result<Unit>) -> Unit) -> Unit
+    onSaveEmployee: (User, (Result<Unit>) -> Unit) -> Unit,
+    onResetPassword: ((String, (Result<Unit>) -> Unit) -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<User?>(null) }
     var selectedEmployeeForDetails by remember { mutableStateOf<User?>(null) }
+    var showResetPasswordConfirmFor by remember { mutableStateOf<User?>(null) }
+    var isResettingPassword by remember { mutableStateOf(false) }
+    var resetPasswordStatusMessage by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
 
     val filteredEmployees = remember(employees, searchQuery) {
         if (searchQuery.isBlank()) employees
@@ -263,6 +268,32 @@ fun EmployeeManagementTab(
                             )
                         )
                     }
+
+                    // Reset Password Button for Admin
+                    OutlinedButton(
+                        onClick = {
+                            val targetEmp = emp
+                            selectedEmployeeForDetails = null
+                            showResetPasswordConfirmFor = targetEmp
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Key,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Indigo600
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Reset Password (पासवर्ड रीसेट लिंक भेजें)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Indigo600
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -283,6 +314,123 @@ fun EmployeeManagementTab(
             dismissButton = {
                 TextButton(onClick = { selectedEmployeeForDetails = null }) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    // Reset Password Confirmation Dialog
+    if (showResetPasswordConfirmFor != null) {
+        val emp = showResetPasswordConfirmFor!!
+        AlertDialog(
+            onDismissRequest = {
+                if (!isResettingPassword) {
+                    showResetPasswordConfirmFor = null
+                }
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Key,
+                        contentDescription = null,
+                        tint = Indigo600,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Reset Password", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Send a secure password reset link to ${emp.name}'s registered email address?",
+                        fontSize = 13.sp,
+                        color = Navy900
+                    )
+                    Text(
+                        text = emp.email,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Indigo600
+                    )
+                    Text(
+                        text = "The reset link is generated securely by Firebase Authentication. No passwords are saved or stored in the database.",
+                        fontSize = 11.sp,
+                        color = Slate500
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isResettingPassword = true
+                        onResetPassword?.invoke(emp.email) { result ->
+                            isResettingPassword = false
+                            showResetPasswordConfirmFor = null
+                            if (result.isSuccess) {
+                                resetPasswordStatusMessage = Pair(true, "Password reset link sent successfully to ${emp.email}")
+                            } else {
+                                val err = result.exceptionOrNull()?.localizedMessage ?: "Failed to send reset link."
+                                resetPasswordStatusMessage = Pair(false, err)
+                            }
+                        } ?: run {
+                            isResettingPassword = false
+                            showResetPasswordConfirmFor = null
+                        }
+                    },
+                    enabled = !isResettingPassword && emp.email.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isResettingPassword) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Send Reset Link")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showResetPasswordConfirmFor = null },
+                    enabled = !isResettingPassword
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Password Reset Result Feedback Dialog
+    if (resetPasswordStatusMessage != null) {
+        val (isSuccess, msg) = resetPasswordStatusMessage!!
+        AlertDialog(
+            onDismissRequest = { resetPasswordStatusMessage = null },
+            title = {
+                Text(
+                    text = if (isSuccess) "Email Sent" else "Notice",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Navy900
+                )
+            },
+            text = {
+                Text(
+                    text = msg,
+                    fontSize = 13.sp,
+                    color = if (isSuccess) Navy900 else Red600
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { resetPasswordStatusMessage = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("OK")
                 }
             }
         )
