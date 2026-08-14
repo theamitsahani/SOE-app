@@ -155,30 +155,30 @@ fun VisitFormScreen(
 
     // School Details State
     var schoolName by remember { mutableStateOf(existingVisit?.schoolName?.ifBlank { null } ?: task?.schoolName ?: initialSchool?.schoolName ?: "") }
-    var udiseCode by remember { mutableStateOf(parsedExistingAnswers.q4_udiseCode.ifBlank { initialSchool?.referenceCode?.ifBlank { null } ?: "08010100101" }) }
+    var udiseCode by remember { mutableStateOf(parsedExistingAnswers.q4_udiseCode.ifBlank { initialSchool?.referenceCode ?: "" }) }
     var stateName by remember { mutableStateOf(existingVisit?.state?.ifBlank { null } ?: initialSchool?.state ?: "Rajasthan") }
     var district by remember { mutableStateOf(existingVisit?.district?.ifBlank { null } ?: task?.district ?: initialSchool?.district ?: "") }
     var block by remember { mutableStateOf(existingVisit?.block?.ifBlank { null } ?: task?.block ?: initialSchool?.block ?: "") }
     var principalName by remember { mutableStateOf(parsedExistingAnswers.q7_principalName.ifBlank { initialSchool?.principalName ?: "" }) }
     var principalMobile by remember { mutableStateOf(parsedExistingAnswers.q8_principalMobile.ifBlank { initialSchool?.principalMobile?.ifBlank { initialSchool.mobile } ?: "" }) }
-    var visitDate by remember { mutableStateOf(existingVisit?.visitDate?.ifBlank { null } ?: task?.visitDate ?: "13-Aug-2026") }
+    var visitDate by remember { mutableStateOf(existingVisit?.visitDate?.ifBlank { null } ?: task?.visitDate ?: "14-Aug-2026") }
 
-    // Participating Classes Checkboxes (Class 6th to 12th)
+    // Participating Classes Checkboxes (Class 6th to 12th) - Unchecked by default for new visit
     val availableClasses = remember { listOf("Class 6th", "Class 7th", "Class 8th", "Class 9th", "Class 10th", "Class 11th", "Class 12th") }
     var selectedClasses by remember {
         val initialSelected = if (parsedExistingAnswers.q22_participatingClasses.isNotBlank()) {
             parsedExistingAnswers.q22_participatingClasses.split(",").map { it.trim() }.toSet()
         } else {
-            setOf("Class 6th", "Class 7th", "Class 8th", "Class 9th", "Class 10th", "Class 11th", "Class 12th")
+            emptySet()
         }
         mutableStateOf(initialSelected)
     }
 
-    // Questionnaire Answers
-    var metPrincipal by remember { mutableStateOf(parsedExistingAnswers.q9_metPrincipal.ifBlank { "हाँ" }) }
-    var missionGyanAwareness by remember { mutableStateOf(parsedExistingAnswers.q10_missionGyanAwareness.ifBlank { "हाँ" }) }
-    var studentCount by remember { mutableStateOf(parsedExistingAnswers.q11_studentCount.ifBlank { "120" }) }
-    var schoolResponse by remember { mutableStateOf(parsedExistingAnswers.q12_schoolResponse.ifBlank { "बहुत अच्छी" }) }
+    // Questionnaire Answers - Unselected / empty by default for new visit
+    var metPrincipal by remember { mutableStateOf(parsedExistingAnswers.q9_metPrincipal) }
+    var missionGyanAwareness by remember { mutableStateOf(parsedExistingAnswers.q10_missionGyanAwareness) }
+    var studentCount by remember { mutableStateOf(parsedExistingAnswers.q11_studentCount) }
+    var schoolResponse by remember { mutableStateOf(parsedExistingAnswers.q12_schoolResponse) }
 
     // Point 13: BCI Name and Contact Number
     var bciName by remember {
@@ -196,13 +196,13 @@ fun VisitFormScreen(
         mutableStateOf(initialBciMobile)
     }
 
-    var whatsappGroupAdded by remember { mutableStateOf(parsedExistingAnswers.q14_whatsappGroupAdded.ifBlank { "हाँ" }) }
-    var posterInstalled by remember { mutableStateOf(parsedExistingAnswers.q15_posterInstalled.ifBlank { "हाँ" }) }
+    var whatsappGroupAdded by remember { mutableStateOf(parsedExistingAnswers.q14_whatsappGroupAdded) }
+    var posterInstalled by remember { mutableStateOf(parsedExistingAnswers.q15_posterInstalled) }
     var keyObservations by remember { mutableStateOf(parsedExistingAnswers.q16_keyObservations) }
     var problemsOrAssistance by remember { mutableStateOf(parsedExistingAnswers.q17_problemsOrAssistance) }
-    var followupRequired by remember { mutableStateOf(parsedExistingAnswers.q18_followupRequired.ifBlank { "नहीं" }) }
+    var followupRequired by remember { mutableStateOf(parsedExistingAnswers.q18_followupRequired) }
     var finalRemarks by remember { mutableStateOf(parsedExistingAnswers.q20_finalRemarks) }
-    var smartClassStatus by remember { mutableStateOf(parsedExistingAnswers.q21_smartClassStatus.ifBlank { "बहुत अच्छी" }) }
+    var smartClassStatus by remember { mutableStateOf(parsedExistingAnswers.q21_smartClassStatus) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()

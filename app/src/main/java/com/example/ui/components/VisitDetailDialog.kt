@@ -213,14 +213,17 @@ fun VisitDetailDialog(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Status & Officer Summary Card
+                    // Compact Status & Officer Info Bar
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -228,7 +231,7 @@ fun VisitDetailDialog(
                             ) {
                                 StatusChip(statusName = visit.status.name)
                                 Text(
-                                    text = "Date: ${visit.visitDate}",
+                                    text = "Visit Date: ${visit.visitDate}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Slate700
@@ -240,12 +243,20 @@ fun VisitDetailDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Person, contentDescription = null, tint = Indigo600, modifier = Modifier.size(16.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = Indigo600,
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Field Officer: ${visit.employeeName}",
-                                        fontSize = 13.sp,
+                                        text = "Field Officer: ${visit.employeeName.ifBlank { "Field Officer" }}",
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Navy900
                                     )
@@ -253,7 +264,7 @@ fun VisitDetailDialog(
 
                                 if (isEditable && editTimeRemainingText.isNotBlank()) {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(6.dp),
                                         color = Color(0xFFEFF6FF)
                                     ) {
                                         Text(
@@ -261,7 +272,7 @@ fun VisitDetailDialog(
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Indigo600,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }
                                 }
@@ -400,14 +411,14 @@ fun VisitDetailDialog(
                         title = "4. Field Survey Responses (विज़िट फॉर्म प्रश्नोत्तरी)",
                         icon = Icons.Default.Assignment
                     ) {
-                        DetailGridRow("9. Met Principal? (प्रधानाचार्य से मुलाकात)", answers.q9_metPrincipal.ifBlank { "हाँ" })
-                        DetailGridRow("10. Mission Gyan App Awareness (ऐप की जानकारी)", answers.q10_missionGyanAwareness.ifBlank { "हाँ" })
-                        DetailGridRow("11. Participating Classes (शामिल कक्षाएं)", answers.q22_participatingClasses.ifBlank { "Class 6th to 12th" })
+                        DetailGridRow("9. Met Principal? (प्रधानाचार्य से मुलाकात)", answers.q9_metPrincipal.ifBlank { "Not Recorded" })
+                        DetailGridRow("10. Mission Gyan App Awareness (ऐप की जानकारी)", answers.q10_missionGyanAwareness.ifBlank { "Not Recorded" })
+                        DetailGridRow("11. Participating Classes (शामिल कक्षाएं)", answers.q22_participatingClasses.ifBlank { "None Selected" })
                         DetailGridRow("12. Student Attendance Count (उपस्थित विद्यार्थी संख्या)", answers.q11_studentCount.ifBlank { "Not Recorded" })
-                        DetailGridRow("13. School Response / Reception (विद्यालय प्रतिक्रिया)", answers.q12_schoolResponse.ifBlank { "बहुत अच्छी" })
-                        DetailGridRow("14. Added to WhatsApp Group (WhatsApp ग्रुप में जोड़े गए)", answers.q14_whatsappGroupAdded.ifBlank { "हाँ" })
-                        DetailGridRow("15. Poster Installed Status (पोस्टर लगाया गया)", answers.q15_posterInstalled.ifBlank { "हाँ" })
-                        DetailGridRow("21. Smart Class Status (स्मार्ट क्लास की स्थिति)", answers.q21_smartClassStatus.ifBlank { "बहुत अच्छी" })
+                        DetailGridRow("13. School Response / Reception (विद्यालय प्रतिक्रिया)", answers.q12_schoolResponse.ifBlank { "Not Recorded" })
+                        DetailGridRow("14. Added to WhatsApp Group (WhatsApp ग्रुप में जोड़े गए)", answers.q14_whatsappGroupAdded.ifBlank { "Not Recorded" })
+                        DetailGridRow("15. Poster Installed Status (पोस्टर लगाया गया)", answers.q15_posterInstalled.ifBlank { "Not Recorded" })
+                        DetailGridRow("21. Smart Class Status (स्मार्ट क्लास की स्थिति)", answers.q21_smartClassStatus.ifBlank { "Not Recorded" })
                         DetailGridRow("16. Key Observations (मुख्य अवलोकन)", answers.q16_keyObservations.ifBlank { "None" })
                         DetailGridRow("17. Problems / Help Required (समस्याएं / आवश्यकता)", answers.q17_problemsOrAssistance.ifBlank { "None" })
                         DetailGridRow("18. Follow-up Required (फॉलो-अप आवश्यकता)", answers.q18_followupRequired.ifBlank { "नहीं" })
