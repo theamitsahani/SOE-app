@@ -34,7 +34,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -79,6 +81,7 @@ import com.example.ui.theme.Slate100
 import com.example.ui.theme.Slate200
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
+import com.example.util.MediaStorageHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -438,12 +441,19 @@ fun VisitDetailDialog(
                                             )
                                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 items(urls) { url ->
+                                                    val isVideo = MediaStorageHelper.isMediaVideo(url, context)
                                                     Box(
                                                         modifier = Modifier
                                                             .size(80.dp)
                                                             .clip(RoundedCornerShape(10.dp))
-                                                            .border(1.dp, Slate200, RoundedCornerShape(10.dp))
-                                                            .clickable { previewPhotoUrl = url }
+                                                            .border(1.dp, if (isVideo) Indigo600 else Slate200, RoundedCornerShape(10.dp))
+                                                            .clickable {
+                                                                if (isVideo) {
+                                                                    MediaStorageHelper.openMedia(context, url)
+                                                                } else {
+                                                                    previewPhotoUrl = url
+                                                                }
+                                                            }
                                                     ) {
                                                         AsyncImage(
                                                             model = url,
@@ -451,6 +461,22 @@ fun VisitDetailDialog(
                                                             contentScale = ContentScale.Crop,
                                                             modifier = Modifier.fillMaxSize()
                                                         )
+
+                                                        if (isVideo) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .fillMaxSize()
+                                                                    .background(Color.Black.copy(alpha = 0.35f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(
+                                                                    Icons.Default.PlayCircleFilled,
+                                                                    contentDescription = "Play Video",
+                                                                    tint = Color.White,
+                                                                    modifier = Modifier.size(28.dp)
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }

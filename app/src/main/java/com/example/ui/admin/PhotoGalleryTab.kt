@@ -1,5 +1,6 @@
 package com.example.ui.admin
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,10 +17,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -29,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.data.model.PhotoCategory
 import com.example.data.model.Visit
@@ -54,6 +60,7 @@ import com.example.ui.theme.Navy900
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
 import com.example.util.ExcelHelper
+import com.example.util.MediaStorageHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -155,6 +162,8 @@ fun PhotoGalleryTab(
             (selectedCategory == "All Categories" || it.categoryName == selectedCategory)
         }
     }
+
+    var previewMediaUrl by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -396,10 +405,18 @@ fun PhotoGalleryTab(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredPhotos) { photo ->
+                    val isVideo = MediaStorageHelper.isMediaVideo(photo.url, context)
                     Card(
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        modifier = Modifier.clickable {
+                            if (isVideo) {
+                                MediaStorageHelper.openMedia(context, photo.url)
+                            } else {
+                                previewMediaUrl = photo.url
+                            }
+                        }
                     ) {
                         Column {
                             Box(
@@ -413,12 +430,63 @@ fun PhotoGalleryTab(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
+
+                                if (isVideo) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.35f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(
+                                                Icons.Default.PlayCircleFilled,
+                                                contentDescription = "Play Video",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                            Text("VIDEO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+                                    }
+                                }
                             }
                             Column(modifier = Modifier.padding(10.dp)) {
                                 Text(photo.categoryName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Navy900)
                                 Text(photo.schoolName, fontSize = 11.sp, color = Slate500, maxLines = 1)
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // Full Media Preview Dialog
+    if (previewMediaUrl != null) {
+        Dialog(onDismissRequest = { previewMediaUrl = null }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.Black,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(420.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AsyncImage(
+                        model = previewMediaUrl,
+                        contentDescription = "Full Preview",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    IconButton(
+                        onClick = { previewMediaUrl = null },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
             }

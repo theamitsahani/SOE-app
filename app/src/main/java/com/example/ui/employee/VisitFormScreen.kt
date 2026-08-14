@@ -31,12 +31,17 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,16 +69,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.data.model.PhotoCategory
 import com.example.data.model.School
@@ -92,9 +100,11 @@ import com.example.ui.theme.Slate200
 import com.example.ui.theme.Slate300
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
+import com.example.util.MediaStorageHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -194,6 +204,9 @@ fun VisitFormScreen(
     var finalRemarks by remember { mutableStateOf(parsedExistingAnswers.q20_finalRemarks) }
     var smartClassStatus by remember { mutableStateOf(parsedExistingAnswers.q21_smartClassStatus.ifBlank { "बहुत अच्छी" }) }
 
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     // Photo Map Category ID -> List of Uri Strings
     val photoMap = remember {
         mutableStateMapOf<String, MutableList<String>>().apply {
@@ -207,16 +220,40 @@ fun VisitFormScreen(
     var showEditSchoolDialog by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<String?>(null) }
+    var showSubmissionSuccessDialog by remember { mutableStateOf(false) }
+    var submissionSuccessMessage by remember { mutableStateOf("") }
     var activePhotoCategory by remember { mutableStateOf<PhotoCategory?>(null) }
+    var previewMediaUrl by remember { mutableStateOf<String?>(null) }
 
-    // Photo Picker
+    // Multi-Photo Picker (Unlimited)
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         activePhotoCategory?.let { cat ->
-            val list = photoMap[cat.categoryId] ?: mutableListOf()
-            uris.forEach { uri -> list.add(uri.toString()) }
-            photoMap[cat.categoryId] = list
+            coroutineScope.launch {
+                val list = (photoMap[cat.categoryId] ?: mutableListOf()).toMutableList()
+                uris.forEach { uri ->
+                    val savedLocalUri = MediaStorageHelper.saveMediaLocally(context, uri)
+                    list.add(savedLocalUri)
+                }
+                photoMap[cat.categoryId] = list
+            }
+        }
+    }
+
+    // Multi-Video Picker (Unlimited)
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        activePhotoCategory?.let { cat ->
+            coroutineScope.launch {
+                val list = (photoMap[cat.categoryId] ?: mutableListOf()).toMutableList()
+                uris.forEach { uri ->
+                    val savedLocalUri = MediaStorageHelper.saveMediaLocally(context, uri)
+                    list.add(savedLocalUri)
+                }
+                photoMap[cat.categoryId] = list
+            }
         }
     }
 
@@ -597,8 +634,13 @@ fun VisitFormScreen(
                     }
 
                     5 -> {
-                        // STEP 5: Photo Uploads
-                        Text("19. फोटो अपलोड (Upload Photos - 5 Mandatory Categories)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                        // STEP 5: Photo & Video Uploads
+                        Text("19. फोटो व वीडियो अपलोड (Upload Photos & Videos)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                        Text(
+                            "अनिवार्य 5 श्रेणियों की फोटो और 'अन्य' में असीमित (No Limit) फोटो व वीडियो अपलोड करें।",
+                            fontSize = 12.sp,
+                            color = Slate500
+                        )
 
                         PhotoCategory.entries.forEach { category ->
                             val currentList = photoMap[category.categoryId] ?: emptyList()
@@ -615,22 +657,71 @@ fun VisitFormScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(category.displayName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy900)
                                             Text(
-                                                text = if (category.minRequired > 0) "Mandatory (Min ${category.minRequired} required)" else "Optional",
+                                                text = if (category.minRequired > 0) "Mandatory (Min ${category.minRequired} required)" else "Optional (Unlimited Uploads - No Limit)",
                                                 fontSize = 11.sp,
                                                 color = if (isSatisfied) Emerald600 else Red600
                                             )
                                         }
 
-                                        IconButton(
-                                            onClick = {
-                                                activePhotoCategory = category
-                                                photoPickerLauncher.launch("image/*")
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            if (category.supportsVideo) {
+                                                // Video picker button
+                                                IconButton(
+                                                    onClick = {
+                                                        activePhotoCategory = category
+                                                        videoPickerLauncher.launch("video/*")
+                                                    }
+                                                ) {
+                                                    Icon(Icons.Default.Videocam, contentDescription = "Add Video", tint = Indigo600)
+                                                }
                                             }
+
+                                            // Photo picker button
+                                            IconButton(
+                                                onClick = {
+                                                    activePhotoCategory = category
+                                                    photoPickerLauncher.launch("image/*")
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = Indigo600)
+                                            }
+                                        }
+                                    }
+
+                                    if (category.supportsVideo) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = Indigo600)
+                                            OutlinedButton(
+                                                onClick = {
+                                                    activePhotoCategory = category
+                                                    photoPickerLauncher.launch("image/*")
+                                                },
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(16.dp), tint = Indigo600)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("+ Add Photos", fontSize = 12.sp, color = Indigo600, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = {
+                                                    activePhotoCategory = category
+                                                    videoPickerLauncher.launch("video/*")
+                                                },
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(16.dp), tint = Indigo600)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("+ Add Videos", fontSize = 12.sp, color = Indigo600, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
 
@@ -640,36 +731,103 @@ fun VisitFormScreen(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(80.dp)
+                                                .height(84.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(Color(0xFFF1F5F9))
                                                 .clickable {
                                                     activePhotoCategory = category
-                                                    photoPickerLauncher.launch("image/*")
+                                                    if (category.supportsVideo) {
+                                                        photoPickerLauncher.launch("image/*")
+                                                    } else {
+                                                        photoPickerLauncher.launch("image/*")
+                                                    }
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(Icons.Default.Add, contentDescription = "Attached Photo", tint = Slate500)
                                                 Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Tap to capture / upload photo", fontSize = 13.sp, color = Slate500)
+                                                Text(
+                                                    text = if (category.supportsVideo) "Tap to upload photos or videos (No limit)" else "Tap to capture / upload photo",
+                                                    fontSize = 13.sp,
+                                                    color = Slate500
+                                                )
                                             }
                                         }
                                     } else {
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            items(currentList) { uriStr ->
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(84.dp)
-                                                         .border(1.5.dp, Emerald600, RoundedCornerShape(12.dp))
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                ) {
-                                                    AsyncImage(
-                                                        model = uriStr,
-                                                        contentDescription = null,
-                                                        contentScale = ContentScale.Crop,
-                                                        modifier = Modifier.fillMaxSize()
-                                                    )
+                                        Column {
+                                            Text(
+                                                text = "${currentList.size} item(s) attached" + if (category.supportsVideo) " (Unlimited)" else "",
+                                                fontSize = 11.sp,
+                                                color = Slate500,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                items(currentList) { uriStr ->
+                                                    val isVideo = MediaStorageHelper.isMediaVideo(uriStr, context)
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(88.dp)
+                                                            .border(1.5.dp, if (isVideo) Indigo600 else Emerald600, RoundedCornerShape(12.dp))
+                                                            .clip(RoundedCornerShape(12.dp))
+                                                            .clickable {
+                                                                if (isVideo) {
+                                                                    MediaStorageHelper.openMedia(context, uriStr)
+                                                                } else {
+                                                                    previewMediaUrl = uriStr
+                                                                }
+                                                            }
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = uriStr,
+                                                            contentDescription = null,
+                                                            contentScale = ContentScale.Crop,
+                                                            modifier = Modifier.fillMaxSize()
+                                                        )
+
+                                                        // If Video, show video badge and play overlay
+                                                        if (isVideo) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .fillMaxSize()
+                                                                    .background(Color.Black.copy(alpha = 0.35f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                                    Icon(
+                                                                        Icons.Default.PlayCircleFilled,
+                                                                        contentDescription = "Play Video",
+                                                                        tint = Color.White,
+                                                                        modifier = Modifier.size(32.dp)
+                                                                    )
+                                                                    Text("VIDEO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Delete Badge Button
+                                                        IconButton(
+                                                            onClick = {
+                                                                val updatedList = (photoMap[category.categoryId] ?: mutableListOf()).toMutableList()
+                                                                updatedList.remove(uriStr)
+                                                                photoMap[category.categoryId] = updatedList
+                                                            },
+                                                            modifier = Modifier
+                                                                .size(24.dp)
+                                                                .align(Alignment.TopEnd)
+                                                                .padding(2.dp)
+                                                                .clip(CircleShape)
+                                                                .background(Red600.copy(alpha = 0.85f))
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.Close,
+                                                                contentDescription = "Remove",
+                                                                tint = Color.White,
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -775,7 +933,12 @@ fun VisitFormScreen(
                                 onSubmitVisit(finalVisit) { res ->
                                     isSubmitting = false
                                     if (res.isSuccess) {
-                                        onBackClick()
+                                        if (isOnline) {
+                                            submissionSuccessMessage = "विज़िट रिपोर्ट सफलतापूर्वक सबमिट और सर्वर पर सिंक हो गई है।"
+                                        } else {
+                                            submissionSuccessMessage = "विज़िट रिपोर्ट स्थानीय रूप से सुरक्षित सहेज ली गई है (Saved Locally)!\n\nनेटवर्क उपलब्ध होते ही ऐप इसे अपने आप सर्वर पर अपलोड (Sync) कर देगा।"
+                                        }
+                                        showSubmissionSuccessDialog = true
                                     } else {
                                         submitError = res.exceptionOrNull()?.localizedMessage ?: "Failed to submit visit report"
                                     }
@@ -798,6 +961,106 @@ fun VisitFormScreen(
                                 fontSize = 15.sp
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // Submission Success Dialog (Offline / Online)
+    if (showSubmissionSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showSubmissionSuccessDialog = false
+                onBackClick()
+            },
+            icon = {
+                Icon(
+                    imageVector = if (isOnline) Icons.Default.CloudDone else Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Emerald600,
+                    modifier = Modifier.size(44.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (isOnline) "Report Submitted & Synced" else "Report Saved Locally (ऑफलाइन सुरक्षित)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Text(
+                    text = submissionSuccessMessage,
+                    fontSize = 14.sp,
+                    color = Slate700
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSubmissionSuccessDialog = false
+                        onBackClick()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("OK / डैशबोर्ड पर जाएँ", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    // Full Media Preview Dialog
+    if (previewMediaUrl != null) {
+        Dialog(onDismissRequest = { previewMediaUrl = null }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.Black,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(420.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    val isVid = MediaStorageHelper.isMediaVideo(previewMediaUrl ?: "", context)
+                    if (isVid) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable {
+                                    MediaStorageHelper.openMedia(context, previewMediaUrl ?: "")
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.PlayCircleFilled,
+                                    contentDescription = "Play Video",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(64.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Tap to Play Video (वीडियो चलाएँ)", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        AsyncImage(
+                            model = previewMediaUrl,
+                            contentDescription = "Full Preview",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { previewMediaUrl = null },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
             }

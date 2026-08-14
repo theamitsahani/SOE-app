@@ -91,48 +91,32 @@ class VisitRepository(private val context: Context) {
     }
 
     /**
-     * Submits a visit report safely with duplicate submission protection.
+     * Submits a visit report safely with offline persistence and slow network protection.
      */
     suspend fun submitVisit(visit: Visit): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            syncManager.updateNetworkState()
-            val isOnline = syncManager.isOnline.value
-            val currentSyncStatus = if (isOnline) SyncStatus.SYNCED else SyncStatus.PENDING
+            val isOnline = syncManager.isNetworkAvailable()
+            val initialSyncStatus = if (isOnline) SyncStatus.PENDING else SyncStatus.PENDING
 
             val finalVisit = visit.copy(
                 status = VisitStatus.SUBMITTED,
-                syncStatus = currentSyncStatus,
+                syncStatus = initialSyncStatus,
                 updatedAt = System.currentTimeMillis()
             )
 
-            // Save to Room DB locally first (ensures offline durability)
+            // Step 1: Save to Room DB locally first (ensures 100% offline durability)
             db.visitDao().insertVisit(finalVisit)
             
-            // Mark all assigned tasks for this school as SUBMITTED so co-officers see it as completed!
+            // Step 2: Mark all assigned tasks for this school as SUBMITTED so co-officers see it as completed
             db.taskDao().markTasksSubmittedForSchool(finalVisit.schoolId)
 
+            // Step 3: If online, attempt immediate background upload with timeout protection
             if (isOnline) {
-                try {
-                    firestore?.collection("visits")
-                        ?.document(finalVisit.visitId)
-                        ?.set(
-                            mapOf(
-                                "visitId" to finalVisit.visitId,
-                                "schoolId" to finalVisit.schoolId,
-                                "employeeId" to finalVisit.employeeId,
-                                "employeeName" to finalVisit.employeeName,
-                                "schoolName" to finalVisit.schoolName,
-                                "district" to finalVisit.district,
-                                "block" to finalVisit.block,
-                                "visitDate" to finalVisit.visitDate,
-                                "status" to finalVisit.status.name,
-                                "answersJson" to finalVisit.answersJson,
-                                "photosJson" to finalVisit.photosJson,
-                                "updatedAt" to finalVisit.updatedAt
-                            )
-                        )
-                } catch (e: Exception) {
-                    // Downgrade syncStatus to PENDING if network fails mid-upload
+                val uploaded = syncManager.uploadSingleVisitToServer(finalVisit)
+                if (uploaded) {
+                    db.visitDao().updateVisit(finalVisit.copy(syncStatus = SyncStatus.SYNCED))
+                } else {
+                    // Stays PENDING; SyncManager auto-sync will upload as soon as network stabilizes
                     db.visitDao().updateVisit(finalVisit.copy(syncStatus = SyncStatus.PENDING))
                 }
             }
@@ -140,7 +124,16 @@ class VisitRepository(private val context: Context) {
             syncManager.checkPendingCount()
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            e.printStackTrace()
+            // Even on unexpected exception, try local save fallback
+            try {
+                db.visitDao().insertVisit(visit.copy(status = VisitStatus.SUBMITTED, syncStatus = SyncStatus.PENDING, updatedAt = System.currentTimeMillis()))
+                syncManager.checkPendingCount()
+                Result.success(Unit)
+            } catch (fallbackError: Exception) {
+                Result.failure(fallbackError)
+            }
         }
     }
+
 }
