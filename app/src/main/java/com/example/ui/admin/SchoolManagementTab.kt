@@ -104,8 +104,16 @@ fun SchoolManagementTab(
         onRefreshSchools { res ->
             isRefreshing = false
             if (res.isFailure) {
-                val err = res.exceptionOrNull()?.message ?: "Failed to refresh"
-                refreshErrorMessage = err
+                val err = res.exceptionOrNull()
+                val errorCode = if (err is com.google.firebase.firestore.FirebaseFirestoreException) {
+                    err.code.name.lowercase().replace('_', '-')
+                } else if (err?.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true) {
+                    "permission-denied"
+                } else {
+                    err?.javaClass?.simpleName ?: "unknown-error"
+                }
+                val errorMsg = err?.message ?: "Unknown error"
+                refreshErrorMessage = "Firebase error: $errorCode ($errorMsg)"
             }
         }
     }

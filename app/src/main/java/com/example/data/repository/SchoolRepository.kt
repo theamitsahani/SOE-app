@@ -32,24 +32,39 @@ class SchoolRepository(private val context: Context) {
     fun startSchoolsRealtimeListener() {
         if (schoolsListenerRegistration != null) return
         val fStore = firestore ?: return
+        val auth = FirebaseUtils.auth
+        val currentUser = auth?.currentUser
+        val uid = currentUser?.uid ?: "Unauthenticated"
+        val projectId = try { fStore.app.options.projectId } catch (e: Exception) { "Unknown" }
+
         try {
             schoolsListenerRegistration = fStore.collection("schools").addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("SchoolRepository", "Schools realtime listener error code: ${error.code}, message: ${error.message}", error)
+                    val errCode = error.code.name.lowercase().replace('_', '-')
+                    val logDetails = """
+                        ================ REALTIME LISTENER EXCEPTION ================
+                        Collection Path: schools
+                        Firebase Error Code: ${error.code} ($errCode)
+                        Error Message: ${error.message}
+                        Project ID: $projectId
+                        Authenticated Firebase UID: $uid
+                        =============================================================
+                    """.trimIndent()
+                    Log.e("SchoolRepository", logDetails, error)
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
                     val docCount = snapshot.documents.size
-                    Log.d("SchoolRepository", "Schools Firestore documents fetched: $docCount")
+                    Log.d("SchoolRepository", "Schools Firestore documents fetched via listener: $docCount")
                     val parsedSchools = snapshot.documents.mapNotNull { doc ->
                         parseDocToSchool(doc)
                     }
-                    Log.d("SchoolRepository", "Schools parsed: ${parsedSchools.size}")
+                    Log.d("SchoolRepository", "Schools parsed via listener: ${parsedSchools.size}")
                     if (parsedSchools.isNotEmpty()) {
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
                                 db.schoolDao().insertSchools(parsedSchools)
-                                Log.d("SchoolRepository", "Schools cached in Room: ${parsedSchools.size}")
+                                Log.d("SchoolRepository", "Schools cached in Room via listener: ${parsedSchools.size}")
                             } catch (e: Exception) {
                                 Log.e("SchoolRepository", "Failed to insert schools into Room cache", e)
                             }
@@ -142,17 +157,34 @@ class SchoolRepository(private val context: Context) {
     }
 
     suspend fun syncSchoolsFromFirestore(): Result<Int> = withContext(Dispatchers.IO) {
-        try {
-            val fStore = firestore ?: run {
-                val msg = "Firestore service is unavailable"
-                Log.e("SchoolRepository", "Sync failed: $msg")
-                return@withContext Result.failure(Exception(msg))
-            }
+        val fStore = firestore ?: run {
+            val msg = "Firestore instance is null"
+            Log.e("SchoolRepository", "Sync failed: $msg")
+            return@withContext Result.failure(Exception(msg))
+        }
 
+        val auth = FirebaseUtils.auth
+        val currentUser = auth?.currentUser
+        val uid = currentUser?.uid ?: "Unauthenticated"
+        val projectId = try { fStore.app.options.projectId } catch (e: Exception) { "Unknown" }
+
+        var roleStr = "Unknown"
+        if (currentUser != null) {
+            try {
+                val userDocTask = fStore.collection("users").document(uid).get()
+                val userDoc = com.google.android.gms.tasks.Tasks.await(userDocTask)
+                roleStr = userDoc.getString("role") ?: "No role field"
+            } catch (e: Exception) {
+                roleStr = "Failed to fetch role: ${e.message}"
+            }
+        }
+
+        try {
+            Log.d("SchoolRepository", "Executing query: FirebaseFirestore.getInstance().collection(\"schools\").get()")
             val snapshotTask = fStore.collection("schools").get()
             val snapshot = com.google.android.gms.tasks.Tasks.await(snapshotTask)
             val docCount = snapshot.documents.size
-            Log.d("SchoolRepository", "Schools Firestore documents fetched: $docCount")
+            Log.d("SchoolRepository", "Schools Firestore documents fetched: $docCount for project: $projectId, path: schools, uid: $uid, role: $roleStr")
 
             val schools = snapshot.documents.mapNotNull { doc ->
                 parseDocToSchool(doc)
@@ -168,10 +200,31 @@ class SchoolRepository(private val context: Context) {
 
             Result.success(schools.size)
         } catch (e: FirebaseFirestoreException) {
-            Log.e("SchoolRepository", "Sync failed with Firestore error code: ${e.code}, message: ${e.message}", e)
+            val errCode = e.code.name.lowercase().replace('_', '-')
+            val logDetails = """
+                ================ FIRESTORE EXCEPTION DETECTED ================
+                Collection Path: schools
+                Firebase Error Code: ${e.code} ($errCode)
+                Error Message: ${e.message}
+                Project ID: $projectId
+                Authenticated Firebase UID: $uid
+                Authenticated User Role: $roleStr
+                ==============================================================
+            """.trimIndent()
+            Log.e("SchoolRepository", logDetails, e)
             Result.failure(e)
         } catch (e: Exception) {
-            Log.e("SchoolRepository", "Sync failed: ${e.message}", e)
+            val logDetails = """
+                ================ EXCEPTION DETECTED ================
+                Collection Path: schools
+                Exception Type: ${e.javaClass.name}
+                Error Message: ${e.message}
+                Project ID: $projectId
+                Authenticated Firebase UID: $uid
+                Authenticated User Role: $roleStr
+                ====================================================
+            """.trimIndent()
+            Log.e("SchoolRepository", logDetails, e)
             Result.failure(e)
         }
     }
