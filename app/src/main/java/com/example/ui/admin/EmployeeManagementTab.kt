@@ -47,6 +47,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,8 +79,13 @@ import java.util.UUID
 fun EmployeeManagementTab(
     employees: List<User>,
     onSaveEmployee: (User, (Result<Unit>) -> Unit) -> Unit,
-    onResetPassword: ((String, (Result<Unit>) -> Unit) -> Unit)? = null
+    onResetPassword: ((String, (Result<Unit>) -> Unit) -> Unit)? = null,
+    onRefresh: (() -> Unit)? = null
 ) {
+    LaunchedEffect(Unit) {
+        onRefresh?.invoke()
+    }
+
     var searchQuery by remember { mutableStateOf("") }
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<User?>(null) }

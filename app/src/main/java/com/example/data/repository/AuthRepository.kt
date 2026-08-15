@@ -9,12 +9,14 @@ import com.example.data.model.User
 import com.example.data.model.UserRole
 import com.example.data.model.UserStatus
 import com.example.util.FirebaseUtils
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AuthRepository(private val context: Context) {
@@ -25,6 +27,75 @@ class AuthRepository(private val context: Context) {
 
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+
+    private var usersListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+
+    init {
+        startListeningToFirestoreUsers()
+    }
+
+    fun startListeningToFirestoreUsers() {
+        if (usersListenerRegistration != null) return
+        val fStore = firestore ?: return
+        try {
+            usersListenerRegistration = fStore.collection("users").addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.w("AuthRepository", "Users collection snapshot listener error: ${error.message}")
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val userEntities = snapshot.documents.mapNotNull { doc ->
+                        parseDocToUserEntity(doc)
+                    }
+                    if (userEntities.isNotEmpty()) {
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                db.userDao().insertUsers(userEntities)
+                            } catch (e: Exception) {
+                                Log.e("AuthRepository", "Failed to cache users in Room DB", e)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("AuthRepository", "Failed to attach snapshot listener", e)
+        }
+    }
+
+    private fun parseDocToUserEntity(doc: com.google.firebase.firestore.DocumentSnapshot): UserEntity? {
+        val docId = doc.id
+        val explicitUid = doc.getString("userId")?.trim()
+        val userId = if (!explicitUid.isNullOrBlank()) explicitUid else docId
+        if (userId.isBlank()) return null
+
+        val email = (doc.getString("email") ?: "").trim()
+        val name = (doc.getString("name")
+            ?: doc.getString("displayName")
+            ?: doc.getString("fullName")
+            ?: (if (email.isNotBlank()) email.substringBefore("@") else "Field Officer")).trim()
+
+        val mobile = (doc.getString("mobile") ?: doc.getString("phone") ?: doc.getString("phoneNumber") ?: "").trim()
+        val state = (doc.getString("state") ?: "Rajasthan").trim().ifBlank { "Rajasthan" }
+        val district = (doc.getString("district") ?: "").trim()
+
+        val rawRole = (doc.getString("role") ?: UserRole.EMPLOYEE.name).trim().uppercase()
+        val normalizedRole = if (rawRole == "ADMIN") UserRole.ADMIN.name else UserRole.EMPLOYEE.name
+
+        val rawStatus = (doc.getString("status") ?: UserStatus.ACTIVE.name).trim().uppercase()
+        val normalizedStatus = if (rawStatus == "INACTIVE") UserStatus.INACTIVE.name else UserStatus.ACTIVE.name
+
+        return UserEntity(
+            userId = userId,
+            name = name,
+            email = email,
+            mobile = mobile,
+            state = state,
+            district = district,
+            role = normalizedRole,
+            status = normalizedStatus
+        )
+    }
 
     suspend fun checkCurrentSession(): User? = withContext(Dispatchers.IO) {
         try {
@@ -358,8 +429,8 @@ class AuthRepository(private val context: Context) {
                     mobile = e.mobile,
                     state = e.state,
                     district = e.district,
-                    role = try { UserRole.valueOf(e.role) } catch (_: Exception) { UserRole.EMPLOYEE },
-                    status = try { UserStatus.valueOf(e.status) } catch (_: Exception) { UserStatus.ACTIVE }
+                    role = if (e.role.equals("ADMIN", ignoreCase = true)) UserRole.ADMIN else UserRole.EMPLOYEE,
+                    status = if (e.status.equals("INACTIVE", ignoreCase = true)) UserStatus.INACTIVE else UserStatus.ACTIVE
                 )
             }.filter { it.role == UserRole.EMPLOYEE }
         }
@@ -372,25 +443,7 @@ class AuthRepository(private val context: Context) {
             val snapshot = com.google.android.gms.tasks.Tasks.await(snapshotTask)
 
             val users = snapshot.documents.mapNotNull { doc ->
-                val userId = doc.getString("userId") ?: doc.id
-                val name = doc.getString("name") ?: ""
-                val email = doc.getString("email") ?: ""
-                val mobile = doc.getString("mobile") ?: ""
-                val state = doc.getString("state") ?: "Rajasthan"
-                val district = doc.getString("district") ?: ""
-                val roleStr = doc.getString("role") ?: UserRole.EMPLOYEE.name
-                val statusStr = doc.getString("status") ?: UserStatus.ACTIVE.name
-
-                UserEntity(
-                    userId = userId,
-                    name = name,
-                    email = email,
-                    mobile = mobile,
-                    state = state,
-                    district = district,
-                    role = roleStr,
-                    status = statusStr
-                )
+                parseDocToUserEntity(doc)
             }
 
             if (users.isNotEmpty()) {
@@ -398,6 +451,7 @@ class AuthRepository(private val context: Context) {
             }
             Result.success(users.size)
         } catch (e: Exception) {
+            Log.e("AuthRepository", "Error syncing employees from Firestore", e)
             Result.failure(e)
         }
     }
@@ -534,15 +588,19 @@ class AuthRepository(private val context: Context) {
                 )
                 db.userDao().insertUser(entity)
 
-                fStore?.collection("users")?.document(user.userId)?.update(
+                fStore?.collection("users")?.document(user.userId)?.set(
                     mapOf(
+                        "userId" to user.userId,
                         "name" to cleanName,
+                        "email" to cleanEmail,
                         "mobile" to cleanMobile,
                         "state" to cleanState,
                         "district" to cleanDistrict,
+                        "role" to user.role.name,
                         "status" to user.status.name,
                         "updatedAt" to System.currentTimeMillis()
-                    )
+                    ),
+                    com.google.firebase.firestore.SetOptions.merge()
                 )
                 return@withContext Result.success(Unit)
             }

@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         // Background sync data from Firestore into local cache
+                        launch { authRepository.syncEmployeesFromFirestore() }
                         launch { schoolRepository.syncSchoolsFromFirestore() }
                         launch { visitRepository.syncVisitsFromFirestore() }
                         launch { taskRepository.syncTasksFromFirestore() }
@@ -190,6 +191,11 @@ class MainActivity : ComponentActivity() {
                                                         scope.launch {
                                                             val res = authRepository.sendPasswordResetEmail(email)
                                                             callback(res)
+                                                        }
+                                                    },
+                                                    onRefresh = {
+                                                        scope.launch {
+                                                            authRepository.syncEmployeesFromFirestore()
                                                         }
                                                     }
                                                 )
