@@ -454,6 +454,292 @@ object ExcelHelper {
     }
 
     /**
+     * Exports visits to a clean formatted PDF document.
+     */
+    fun exportVisitsToPdf(context: Context, visits: List<Visit>): File {
+        val pdfDocument = android.graphics.pdf.PdfDocument()
+        
+        val pageWidth = 595 // A4 width in points
+        val pageHeight = 842 // A4 height in points
+        val margin = 36f
+        
+        val titlePaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#1E1B4B")
+            textSize = 18f
+            isFakeBoldText = true
+            isAntiAlias = true
+        }
+        
+        val subTitlePaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#475569")
+            textSize = 10f
+            isAntiAlias = true
+        }
+        
+        val headerBgPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#4F46E5")
+            style = android.graphics.Paint.Style.FILL
+        }
+        
+        val headerTextPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 10f
+            isFakeBoldText = true
+            isAntiAlias = true
+        }
+        
+        val cellTextPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#1E293B")
+            textSize = 9f
+            isAntiAlias = true
+        }
+        
+        val borderPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#E2E8F0")
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 0.5f
+        }
+        
+        val altRowPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.parseColor("#F8FAFC")
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        var pageNumber = 1
+        var pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        fun drawHeader(canvas: android.graphics.Canvas) {
+            canvas.drawText("SOE School Visit Reports Summary", margin, 45f, titlePaint)
+            val dateStr = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())
+            val subtitle = "Total Reports: ${visits.size}  |  Generated On: $dateStr"
+            canvas.drawText(subtitle, margin, 62f, subTitlePaint)
+            
+            val tableTop = 75f
+            val tableHeight = 22f
+            canvas.drawRect(margin, tableTop, pageWidth - margin, tableTop + tableHeight, headerBgPaint)
+            
+            var x = margin + 5f
+            canvas.drawText("#", x, tableTop + 15f, headerTextPaint)
+            x += 25f
+            canvas.drawText("Date", x, tableTop + 15f, headerTextPaint)
+            x += 65f
+            canvas.drawText("School Name", x, tableTop + 15f, headerTextPaint)
+            x += 145f
+            canvas.drawText("District", x, tableTop + 15f, headerTextPaint)
+            x += 80f
+            canvas.drawText("Block", x, tableTop + 15f, headerTextPaint)
+            x += 70f
+            canvas.drawText("Officer", x, tableTop + 15f, headerTextPaint)
+            x += 80f
+            canvas.drawText("Status", x, tableTop + 15f, headerTextPaint)
+        }
+
+        drawHeader(canvas)
+
+        var y = 102f
+        val rowHeight = 22f
+
+        for ((index, visit) in visits.withIndex()) {
+            if (y + rowHeight > pageHeight - 40f) {
+                subTitlePaint.textAlign = android.graphics.Paint.Align.RIGHT
+                canvas.drawText("Page $pageNumber", pageWidth - margin, pageHeight - 20f, subTitlePaint)
+                subTitlePaint.textAlign = android.graphics.Paint.Align.LEFT
+
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                drawHeader(canvas)
+                y = 102f
+            }
+
+            if (index % 2 == 1) {
+                canvas.drawRect(margin, y - 14f, pageWidth - margin, y + 8f, altRowPaint)
+            }
+            canvas.drawLine(margin, y + 8f, pageWidth - margin, y + 8f, borderPaint)
+
+            var x = margin + 5f
+            canvas.drawText("${index + 1}", x, y, cellTextPaint)
+            x += 25f
+            canvas.drawText(visit.visitDate.take(10), x, y, cellTextPaint)
+            x += 65f
+            canvas.drawText(visit.schoolName.take(22), x, y, cellTextPaint)
+            x += 145f
+            canvas.drawText(visit.district.take(12), x, y, cellTextPaint)
+            x += 80f
+            canvas.drawText(visit.block.take(10), x, y, cellTextPaint)
+            x += 70f
+            canvas.drawText(visit.employeeName.take(12), x, y, cellTextPaint)
+            x += 80f
+            canvas.drawText(visit.status.name.take(10), x, y, cellTextPaint)
+
+            y += rowHeight
+        }
+
+        subTitlePaint.textAlign = android.graphics.Paint.Align.RIGHT
+        canvas.drawText("Page $pageNumber", pageWidth - margin, pageHeight - 20f, subTitlePaint)
+        subTitlePaint.textAlign = android.graphics.Paint.Align.LEFT
+
+        pdfDocument.finishPage(page)
+
+        val file = File(context.cacheDir, "SOE_Visit_Report_${System.currentTimeMillis()}.pdf")
+        FileOutputStream(file).use { out ->
+            pdfDocument.writeTo(out)
+        }
+        pdfDocument.close()
+
+        shareFile(context, file, "SOE Visit Reports PDF", "application/pdf")
+        return file
+    }
+
+    /**
+     * Exports visits to a native Excel spreadsheet (.xlsx).
+     */
+    fun exportVisitsToExcel(context: Context, visits: List<Visit>): File {
+        val file = File(context.cacheDir, "SOE_Visit_Report_${System.currentTimeMillis()}.xlsx")
+        
+        val headers = listOf(
+            "Visit ID", "Date", "Employee", "District", "Block", "School Name", 
+            "Reference Code", "Principal Name", "Principal Mobile", "Met Principal", 
+            "Mission Gyan Knowledge", "Student Attendance", "School Response", 
+            "BCI Name", "BCI Mobile", "BCI Full Details", "WhatsApp Group Status", 
+            "Poster Installed", "Key Observations", "Problems/Help Required", 
+            "Follow-up Needed", "Smart Class Status", "Final Remarks"
+        )
+
+        val stringList = mutableListOf<String>()
+        val stringMap = mutableMapOf<String, Int>()
+
+        fun getSharedStringIndex(str: String): Int {
+            return stringMap.getOrPut(str) {
+                val idx = stringList.size
+                stringList.add(str)
+                idx
+            }
+        }
+
+        headers.forEach { getSharedStringIndex(it) }
+
+        val rowsData = mutableListOf<List<Int>>()
+        for (v in visits) {
+            val a = parseVisitAnswers(v.answersJson)
+            val bciName = a.q13_bciName.ifBlank {
+                if (a.q13_bciContactDetails.contains("-")) a.q13_bciContactDetails.substringBefore("-").trim()
+                else a.q13_bciContactDetails
+            }
+            val bciMobile = a.q13_bciMobile.ifBlank {
+                if (a.q13_bciContactDetails.contains("-")) a.q13_bciContactDetails.substringAfter("-").trim()
+                else ""
+            }
+
+            val rowVals = listOf(
+                v.visitId, v.visitDate, v.employeeName, v.district, v.block,
+                v.schoolName, a.q4_udiseCode, a.q7_principalName, a.q8_principalMobile,
+                a.q9_metPrincipal, a.q10_missionGyanAwareness, a.q11_studentCount, a.q12_schoolResponse,
+                bciName, bciMobile, a.q13_bciContactDetails, a.q14_whatsappGroupAdded,
+                a.q15_posterInstalled, a.q16_keyObservations, a.q17_problemsOrAssistance,
+                a.q18_followupRequired, a.q21_smartClassStatus, a.q20_finalRemarks
+            )
+            val rowIndices = rowVals.map { getSharedStringIndex(it) }
+            rowsData.add(rowIndices)
+        }
+
+        val sharedStringsXml = buildString {
+            append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n")
+            append("<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"${stringList.size}\" uniqueCount=\"${stringList.size}\">\n")
+            for (str in stringList) {
+                val escaped = str.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
+                append("  <si><t>$escaped</t></si>\n")
+            }
+            append("</sst>")
+        }
+
+        val sheet1Xml = buildString {
+            append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n")
+            append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">\n")
+            append("  <sheetData>\n")
+
+            append("    <row r=\"1\">\n")
+            headers.indices.forEach { colIdx ->
+                val colRef = getColumnLetter(colIdx) + "1"
+                append("      <c r=\"$colRef\" t=\"s\"><v>$colIdx</v></c>\n")
+            }
+            append("    </row>\n")
+
+            rowsData.forEachIndexed { rIdx, rowIndices ->
+                val rowNum = rIdx + 2
+                append("    <row r=\"$rowNum\">\n")
+                rowIndices.forEachIndexed { cIdx, strIdx ->
+                    val colRef = getColumnLetter(cIdx) + rowNum
+                    append("      <c r=\"$colRef\" t=\"s\"><v>$strIdx</v></c>\n")
+                }
+                append("    </row>\n")
+            }
+
+            append("  </sheetData>\n")
+            append("</worksheet>")
+        }
+
+        val contentTypesXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>"""
+
+        val relsXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+        val workbookXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Visit Reports" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>"""
+
+        val workbookRelsXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>"""
+
+        ZipOutputStream(FileOutputStream(file)).use { zos ->
+            fun addZipEntry(name: String, content: String) {
+                zos.putNextEntry(ZipEntry(name))
+                zos.write(content.toByteArray(Charsets.UTF_8))
+                zos.closeEntry()
+            }
+
+            addZipEntry("[Content_Types].xml", contentTypesXml)
+            addZipEntry("_rels/.rels", relsXml)
+            addZipEntry("xl/workbook.xml", workbookXml)
+            addZipEntry("xl/_rels/workbook.xml.rels", workbookRelsXml)
+            addZipEntry("xl/sharedStrings.xml", sharedStringsXml)
+            addZipEntry("xl/worksheets/sheet1.xml", sheet1Xml)
+        }
+
+        shareFile(context, file, "SOE Visit Reports Excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        return file
+    }
+
+    private fun getColumnLetter(colIndex: Int): String {
+        var temp = colIndex
+        var colName = ""
+        while (temp >= 0) {
+            colName = ('A' + (temp % 26)).toString() + colName
+            temp = temp / 26 - 1
+        }
+        return colName
+    }
+
+    /**
      * Exports visits to a clean formatted Excel CSV file.
      */
     fun exportVisitsToCsv(context: Context, visits: List<Visit>): File {

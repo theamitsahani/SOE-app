@@ -1,7 +1,9 @@
 package com.example.ui.admin
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,11 +17,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,7 +48,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -78,6 +87,7 @@ fun ReportsTab(
     var blockExpanded by remember { mutableStateOf(false) }
 
     var selectedVisitForDetails by remember { mutableStateOf<Visit?>(null) }
+    var showExportDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     val statusList = listOf("All Statuses", "Completed", "Pending", "Follow-up Required")
@@ -141,14 +151,14 @@ fun ReportsTab(
 
                 Button(
                     onClick = {
-                        ExcelHelper.exportVisitsToCsv(context, filteredVisits)
+                        showExportDialog = true
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
                 ) {
                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Export CSV", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("Export", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -368,5 +378,144 @@ fun ReportsTab(
             school = matchedSchool,
             onDismiss = { selectedVisitForDetails = null }
         )
+    }
+
+    // Format Selection Dialog (PDF, Excel, CSV)
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = Color.White,
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Indigo600.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = null,
+                            tint = Indigo600,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Export Reports",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Navy900
+                        )
+                        Text(
+                            text = "Select format for ${filteredVisits.size} visit records",
+                            fontSize = 12.sp,
+                            color = Slate500
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // PDF Option
+                    ExportOptionCard(
+                        title = "PDF Document (.pdf)",
+                        subtitle = "Printable summary report with headers and table pages",
+                        badgeColor = Color(0xFFDC2626),
+                        icon = Icons.Default.PictureAsPdf,
+                        onClick = {
+                            showExportDialog = false
+                            ExcelHelper.exportVisitsToPdf(context, filteredVisits)
+                        }
+                    )
+
+                    // Excel Option
+                    ExportOptionCard(
+                        title = "Excel Spreadsheet (.xlsx)",
+                        subtitle = "Complete dataset for Microsoft Excel & Google Sheets",
+                        badgeColor = Color(0xFF16A34A),
+                        icon = Icons.Default.TableChart,
+                        onClick = {
+                            showExportDialog = false
+                            ExcelHelper.exportVisitsToExcel(context, filteredVisits)
+                        }
+                    )
+
+                    // CSV Option
+                    ExportOptionCard(
+                        title = "CSV File (.csv)",
+                        subtitle = "Comma-separated text file with UTF-8 BOM encoding",
+                        badgeColor = Color(0xFF2563EB),
+                        icon = Icons.Default.Description,
+                        onClick = {
+                            showExportDialog = false
+                            ExcelHelper.exportVisitsToCsv(context, filteredVisits)
+                        }
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showExportDialog = false }) {
+                    Text("Cancel", fontWeight = FontWeight.Medium, color = Slate500)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ExportOptionCard(
+    title: String,
+    subtitle: String,
+    badgeColor: Color,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(badgeColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = badgeColor, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                Text(subtitle, fontSize = 11.sp, color = Slate500)
+            }
+            Icon(
+                Icons.Default.ArrowForward,
+                contentDescription = null,
+                tint = Slate500,
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }
