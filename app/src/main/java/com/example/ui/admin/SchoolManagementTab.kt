@@ -83,13 +83,15 @@ fun SchoolManagementTab(
     schools: List<School>,
     onImportSchools: (List<School>, List<com.example.data.model.Visit>, (Result<Int>) -> Unit) -> Unit,
     onUpdateSchool: (School) -> Unit,
-    onDeleteSchool: (String) -> Unit = {}
+    onDeleteSchool: (String) -> Unit = {},
+    onRefreshSchools: ((Result<Int>) -> Unit) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedSchoolForEdit by remember { mutableStateOf<School?>(null) }
     var showAddSchoolDialog by remember { mutableStateOf(false) }
     var importValidationResult by remember { mutableStateOf<ImportValidationResult?>(null) }
     var isImporting by remember { mutableStateOf(false) }
+    var isRefreshing by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -118,7 +120,7 @@ fun SchoolManagementTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Top Header with Actions (Manual Add + Import Excel)
+        // Top Header with Actions (Manual Add + Import Excel + Refresh)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
@@ -126,9 +128,38 @@ fun SchoolManagementTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text("School Directory", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy900)
-                        Text("Total: ${schools.size} schools enrolled", fontSize = 12.sp, color = Slate500)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text("School Directory", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy900)
+                            Text("Total: ${schools.size} schools enrolled", fontSize = 12.sp, color = Slate500)
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        if (isRefreshing) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Indigo600)
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    isRefreshing = true
+                                    onRefreshSchools { res ->
+                                        isRefreshing = false
+                                        if (res.isSuccess) {
+                                            Toast.makeText(context, "Schools refreshed from Firestore", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            val err = res.exceptionOrNull()?.message ?: "Failed to refresh"
+                                            Toast.makeText(context, "Refresh failed: $err", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.Add, // icon reused for layout simplicity
+                                    contentDescription = "Refresh Schools",
+                                    tint = Indigo600,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                     }
 
                     Row(

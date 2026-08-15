@@ -214,9 +214,9 @@ class MainActivity : ComponentActivity() {
                                                     onImportSchools = { newSchools, completedVisits, callback ->
                                                         scope.launch {
                                                             val res = schoolRepository.importSchools(newSchools)
-                                                             for (v in completedVisits) {
-                                                                 visitRepository.submitVisit(v)
-                                                             }
+                                                            for (v in completedVisits) {
+                                                                visitRepository.submitVisit(v)
+                                                            }
                                                             callback(res)
                                                         }
                                                     },
@@ -225,6 +225,9 @@ class MainActivity : ComponentActivity() {
                                                     },
                                                     onDeleteSchool = { schoolId ->
                                                         scope.launch { schoolRepository.deleteSchool(schoolId) }
+                                                    },
+                                                    onRefreshSchools = { callback ->
+                                                        scope.launch { callback(schoolRepository.syncSchoolsFromFirestore()) }
                                                     }
                                                 )
                                             }
@@ -239,8 +242,8 @@ class MainActivity : ComponentActivity() {
                                                             val res = taskRepository.assignTask(
                                                                 schoolId = sch.schoolId,
                                                                 schoolName = sch.schoolName,
-                                                                district = sch.district,
-                                                                block = sch.block,
+                                                                district = sch.districtName,
+                                                                block = sch.blockName,
                                                                 employeeId = emp.userId,
                                                                 employeeName = emp.name,
                                                                 visitDate = date,

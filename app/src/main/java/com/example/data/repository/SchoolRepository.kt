@@ -32,18 +32,25 @@ class SchoolRepository(private val context: Context) {
                 val schoolName = doc.getString("schoolName") ?: ""
                 if (schoolName.isBlank()) return@mapNotNull null
 
+                val stateName = doc.getString("stateName") ?: doc.getString("state") ?: "Rajasthan"
+                val districtName = doc.getString("districtName") ?: doc.getString("district") ?: ""
+                val schoolType = doc.getString("schoolType") ?: doc.getString("type") ?: ""
+                val villageName = doc.getString("villageName") ?: doc.getString("village") ?: ""
+                val principalMobile = doc.getString("principalMobile") ?: doc.getString("mobile") ?: doc.getString("principalPhone") ?: ""
+                val visitDate = doc.getString("visitDate") ?: doc.getString("originalVisitDate") ?: ""
+
                 School(
                     schoolId = schoolId,
                     sr = doc.getString("sr") ?: "",
-                    stateName = doc.getString("stateName") ?: "Rajasthan",
-                    districtName = doc.getString("districtName") ?: "",
+                    stateName = stateName,
+                    districtName = districtName,
                     schoolName = schoolName,
-                    schoolType = doc.getString("schoolType") ?: "",
-                    villageName = doc.getString("villageName") ?: "",
+                    schoolType = schoolType,
+                    villageName = villageName,
                     principalName = doc.getString("principalName") ?: "",
-                    blockName = doc.getString("blockName") ?: "",
-                    principalMobile = doc.getString("principalMobile") ?: "",
-                    visitDate = doc.getString("visitDate") ?: "",
+                    blockName = doc.getString("blockName") ?: doc.getString("block") ?: "",
+                    principalMobile = principalMobile,
+                    visitDate = visitDate,
                     createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
                     updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
                 )
@@ -62,24 +69,34 @@ class SchoolRepository(private val context: Context) {
         try {
             db.schoolDao().insertSchools(schools)
 
-            // Sync to Firestore
-            for (sch in schools) {
-                firestore?.collection("schools")?.document(sch.schoolId)?.set(
-                    mapOf(
-                        "schoolId" to sch.schoolId,
-                        "stateName" to sch.stateName,
-                        "districtName" to sch.districtName,
-                        "schoolName" to sch.schoolName,
-                        "schoolType" to sch.schoolType,
-                        "villageName" to sch.villageName,
-                        "principalName" to sch.principalName,
-                        "blockName" to sch.blockName,
-                        "principalMobile" to sch.principalMobile,
-                        "visitDate" to sch.visitDate,
-                        "sr" to sch.sr,
-                        "updatedAt" to System.currentTimeMillis()
+            val fStore = firestore
+            if (fStore != null) {
+                // Sync to Firestore
+                for (sch in schools) {
+                    val task = fStore.collection("schools").document(sch.schoolId).set(
+                        mapOf(
+                            "schoolId" to sch.schoolId,
+                            "state" to sch.stateName,
+                            "stateName" to sch.stateName,
+                            "district" to sch.districtName,
+                            "districtName" to sch.districtName,
+                            "schoolName" to sch.schoolName,
+                            "type" to sch.schoolType,
+                            "schoolType" to sch.schoolType,
+                            "village" to sch.villageName,
+                            "villageName" to sch.villageName,
+                            "principalName" to sch.principalName,
+                            "block" to sch.blockName,
+                            "blockName" to sch.blockName,
+                            "mobile" to sch.principalMobile,
+                            "principalMobile" to sch.principalMobile,
+                            "visitDate" to sch.visitDate,
+                            "sr" to sch.sr,
+                            "updatedAt" to System.currentTimeMillis()
+                        )
                     )
-                )
+                    com.google.android.gms.tasks.Tasks.await(task)
+                }
             }
 
             Result.success(schools.size)
@@ -97,22 +114,32 @@ class SchoolRepository(private val context: Context) {
             val updated = school.copy(updatedAt = System.currentTimeMillis())
             db.schoolDao().updateSchool(updated)
 
-            // Sync update to Firestore
-            firestore?.collection("schools")?.document(school.schoolId)?.set(
-                mapOf(
-                    "schoolId" to updated.schoolId,
-                    "stateName" to updated.stateName,
-                    "districtName" to updated.districtName,
-                    "schoolName" to updated.schoolName,
-                    "schoolType" to updated.schoolType,
-                    "villageName" to updated.villageName,
-                    "principalName" to updated.principalName,
-                    "blockName" to updated.blockName,
-                    "principalMobile" to updated.principalMobile,
-                    "visitDate" to updated.visitDate,
-                    "updatedAt" to updated.updatedAt
+            val fStore = firestore
+            if (fStore != null) {
+                // Sync update to Firestore
+                val task = fStore.collection("schools").document(school.schoolId).set(
+                    mapOf(
+                        "schoolId" to updated.schoolId,
+                        "state" to updated.stateName,
+                        "stateName" to updated.stateName,
+                        "district" to updated.districtName,
+                        "districtName" to updated.districtName,
+                        "schoolName" to updated.schoolName,
+                        "type" to updated.schoolType,
+                        "schoolType" to updated.schoolType,
+                        "village" to updated.villageName,
+                        "villageName" to updated.villageName,
+                        "principalName" to updated.principalName,
+                        "block" to updated.blockName,
+                        "blockName" to updated.blockName,
+                        "mobile" to updated.principalMobile,
+                        "principalMobile" to updated.principalMobile,
+                        "visitDate" to updated.visitDate,
+                        "updatedAt" to updated.updatedAt
+                    )
                 )
-            )
+                com.google.android.gms.tasks.Tasks.await(task)
+            }
 
             Result.success(Unit)
         } catch (e: Exception) {

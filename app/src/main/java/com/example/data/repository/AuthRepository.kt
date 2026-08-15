@@ -629,20 +629,23 @@ class AuthRepository(private val context: Context) {
             db.userDao().insertUser(entity)
 
             // Update directly in Firestore users collection
-            fStore?.collection("users")?.document(user.userId)?.set(
-                mapOf(
-                    "userId" to user.userId,
-                    "name" to cleanName,
-                    "email" to cleanEmail,
-                    "mobile" to cleanMobile,
-                    "state" to cleanState,
-                    "district" to cleanDistrict,
-                    "role" to user.role.name,
-                    "status" to user.status.name,
-                    "updatedAt" to System.currentTimeMillis()
-                ),
-                com.google.firebase.firestore.SetOptions.merge()
-            )
+            if (fStore != null) {
+                val setTask = fStore.collection("users").document(user.userId).set(
+                    mapOf(
+                        "userId" to user.userId,
+                        "name" to cleanName,
+                        "email" to cleanEmail,
+                        "mobile" to cleanMobile,
+                        "state" to cleanState,
+                        "district" to cleanDistrict,
+                        "role" to user.role.name,
+                        "status" to user.status.name,
+                        "updatedAt" to System.currentTimeMillis()
+                    ),
+                    com.google.firebase.firestore.SetOptions.merge()
+                )
+                com.google.android.gms.tasks.Tasks.await(setTask)
+            }
 
             return@withContext Result.success(Unit)
         } catch (e: Exception) {

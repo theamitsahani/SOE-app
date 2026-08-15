@@ -159,9 +159,10 @@ class SyncManager(private val context: Context) {
                     "updatedAt" to visit.updatedAt
                 )
 
-                fStore.collection("visits")
+                val setTask = fStore.collection("visits")
                     .document(visit.visitId)
                     .set(visitMap)
+                com.google.android.gms.tasks.Tasks.await(setTask)
                 true
             }
             success == true

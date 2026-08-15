@@ -4,7 +4,6 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.functions.FirebaseFunctions
 
 object FirebaseUtils {
     fun initialize(context: Context) {
@@ -27,13 +26,6 @@ object FirebaseUtils {
     val firestore: FirebaseFirestore?
         get() = try {
             FirebaseFirestore.getInstance()
-        } catch (e: Exception) {
-            null
-        }
-
-    val functions: FirebaseFunctions?
-        get() = try {
-            FirebaseFunctions.getInstance()
         } catch (e: Exception) {
             null
         }

@@ -29,8 +29,13 @@ class TaskRepository(private val context: Context) {
                 val taskId = doc.getString("taskId") ?: doc.id
                 val schoolId = doc.getString("schoolId") ?: ""
                 val employeeId = doc.getString("employeeId") ?: ""
-                val schoolName = doc.getString("schoolName") ?: ""
-                if (schoolName.isBlank()) return@mapNotNull null
+                var schoolName = doc.getString("schoolName") ?: ""
+                if (schoolName.isBlank() && schoolId.isNotBlank()) {
+                    schoolName = db.schoolDao().getSchoolById(schoolId)?.schoolName ?: "School ($schoolId)"
+                }
+                if (schoolName.isBlank()) {
+                    schoolName = "School Visit Task"
+                }
 
                 val statusStr = doc.getString("status") ?: VisitStatus.ASSIGNED.name
                 val status = try { VisitStatus.valueOf(statusStr) } catch (e: Exception) { VisitStatus.ASSIGNED }
@@ -94,23 +99,27 @@ class TaskRepository(private val context: Context) {
             db.taskDao().insertTask(task)
 
             // Sync to Firestore
-            firestore?.collection("tasks")?.document(taskId)?.set(
-                mapOf(
-                    "taskId" to taskId,
-                    "visitId" to visitId,
-                    "schoolId" to schoolId,
-                    "employeeId" to employeeId,
-                    "employeeName" to employeeName,
-                    "schoolName" to schoolName,
-                    "district" to district,
-                    "block" to block,
-                    "assignedBy" to "Admin",
-                    "visitDate" to visitDate,
-                    "status" to VisitStatus.ASSIGNED.name,
-                    "notes" to notes,
-                    "createdAt" to task.createdAt
+            val fStore = firestore
+            if (fStore != null) {
+                val setTask = fStore.collection("tasks").document(taskId).set(
+                    mapOf(
+                        "taskId" to taskId,
+                        "visitId" to visitId,
+                        "schoolId" to schoolId,
+                        "employeeId" to employeeId,
+                        "employeeName" to employeeName,
+                        "schoolName" to schoolName,
+                        "district" to district,
+                        "block" to block,
+                        "assignedBy" to "Admin",
+                        "visitDate" to visitDate,
+                        "status" to VisitStatus.ASSIGNED.name,
+                        "notes" to notes,
+                        "createdAt" to task.createdAt
+                    )
                 )
-            )
+                com.google.android.gms.tasks.Tasks.await(setTask)
+            }
 
             Result.success(task)
         } catch (e: Exception) {
@@ -124,7 +133,11 @@ class TaskRepository(private val context: Context) {
             if (task != null) {
                 val updated = task.copy(status = status)
                 db.taskDao().updateTask(updated)
-                firestore?.collection("tasks")?.document(taskId)?.update("status", status.name)
+                val fStore = firestore
+                if (fStore != null) {
+                    val updateTask = fStore.collection("tasks").document(taskId).update("status", status.name)
+                    com.google.android.gms.tasks.Tasks.await(updateTask)
+                }
             }
             Result.success(Unit)
         } catch (e: Exception) {
