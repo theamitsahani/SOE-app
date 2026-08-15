@@ -19,10 +19,34 @@ class TaskRepository(private val context: Context) {
 
     fun getTasksByEmployee(employeeId: String): Flow<List<Task>> = db.taskDao().getTasksByEmployee(employeeId)
 
-    suspend fun syncTasksFromFirestore(): Result<Int> = withContext(Dispatchers.IO) {
+    suspend fun syncTasksFromFirestore(role: com.example.data.model.UserRole? = null, userId: String? = null): Result<Int> = withContext(Dispatchers.IO) {
         try {
+            val fAuth = FirebaseUtils.auth
+            val currentFbUser = fAuth?.currentUser
+            val currentUid = userId ?: currentFbUser?.uid ?: ""
+
             val fStore = firestore ?: return@withContext Result.failure(Exception("Firestore not initialized"))
-            val snapshotTask = fStore.collection("tasks").get()
+
+            var isEmployee = (role == com.example.data.model.UserRole.EMPLOYEE)
+
+            if (role == null && currentUid.isNotBlank()) {
+                try {
+                    val userDocTask = fStore.collection("users").document(currentUid).get()
+                    val userDoc = com.google.android.gms.tasks.Tasks.await(userDocTask)
+                    val r = userDoc.getString("role")?.trim()?.uppercase()
+                    if (r == "EMPLOYEE") isEmployee = true
+                } catch (e: Exception) {
+                    android.util.Log.w("TaskRepository", "Could not check current user role, default behavior", e)
+                }
+            }
+
+            val query = if (isEmployee && currentUid.isNotBlank()) {
+                fStore.collection("tasks").whereEqualTo("employeeId", currentUid)
+            } else {
+                fStore.collection("tasks")
+            }
+
+            val snapshotTask = query.get()
             val snapshot = com.google.android.gms.tasks.Tasks.await(snapshotTask)
 
             val tasks = snapshot.documents.mapNotNull { doc ->

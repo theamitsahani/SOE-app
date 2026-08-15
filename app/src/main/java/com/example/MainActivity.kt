@@ -105,11 +105,13 @@ class MainActivity : ComponentActivity() {
 
                             // Background sync data from Firestore into local cache when authenticated
                             if (sessionUser.role == UserRole.ADMIN) {
+                                authRepository.startListeningToFirestoreUsers()
                                 launch { authRepository.syncEmployeesFromFirestore() }
                             }
+                            schoolRepository.startSchoolsRealtimeListener()
                             launch { schoolRepository.syncSchoolsFromFirestore() }
-                            launch { visitRepository.syncVisitsFromFirestore() }
-                            launch { taskRepository.syncTasksFromFirestore() }
+                            launch { visitRepository.syncVisitsFromFirestore(sessionUser.role, sessionUser.userId) }
+                            launch { taskRepository.syncTasksFromFirestore(sessionUser.role, sessionUser.userId) }
                         }
 
                         syncManager.checkPendingCount()
@@ -140,8 +142,8 @@ class MainActivity : ComponentActivity() {
                                                         currentScreen = ScreenState.Employee(user)
                                                     }
                                                     launch { schoolRepository.syncSchoolsFromFirestore() }
-                                                    launch { visitRepository.syncVisitsFromFirestore() }
-                                                    launch { taskRepository.syncTasksFromFirestore() }
+                                                    launch { visitRepository.syncVisitsFromFirestore(user.role, user.userId) }
+                                                    launch { taskRepository.syncTasksFromFirestore(user.role, user.userId) }
 
                                                     onResult(Result.success(Unit))
                                                 } else {

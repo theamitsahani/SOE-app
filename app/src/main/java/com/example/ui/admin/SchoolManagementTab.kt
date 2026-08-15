@@ -53,7 +53,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,8 +94,25 @@ fun SchoolManagementTab(
     var importValidationResult by remember { mutableStateOf<ImportValidationResult?>(null) }
     var isImporting by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var refreshErrorMessage by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+
+    fun triggerRefresh() {
+        isRefreshing = true
+        refreshErrorMessage = null
+        onRefreshSchools { res ->
+            isRefreshing = false
+            if (res.isFailure) {
+                val err = res.exceptionOrNull()?.message ?: "Failed to refresh"
+                refreshErrorMessage = err
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        triggerRefresh()
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -138,25 +157,14 @@ fun SchoolManagementTab(
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Indigo600)
                         } else {
                             IconButton(
-                                onClick = {
-                                    isRefreshing = true
-                                    onRefreshSchools { res ->
-                                        isRefreshing = false
-                                        if (res.isSuccess) {
-                                            Toast.makeText(context, "Schools refreshed from Firestore", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            val err = res.exceptionOrNull()?.message ?: "Failed to refresh"
-                                            Toast.makeText(context, "Refresh failed: $err", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                },
+                                onClick = { triggerRefresh() },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.Add, // icon reused for layout simplicity
-                                    contentDescription = "Refresh Schools",
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh Schools from Firestore",
                                     tint = Indigo600,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -215,9 +223,33 @@ fun SchoolManagementTab(
                             .padding(28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(Icons.Default.School, contentDescription = null, tint = Slate500, modifier = Modifier.size(44.dp))
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text("No schools found matching search", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Slate500)
+                        if (isRefreshing) {
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp), strokeWidth = 3.dp, color = Indigo600)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Fetching schools from Firebase...", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Indigo600)
+                        } else if (searchQuery.isNotBlank()) {
+                            Icon(Icons.Default.School, contentDescription = null, tint = Slate500, modifier = Modifier.size(44.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("No schools found matching search", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Slate500)
+                        } else {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Red600, modifier = Modifier.size(44.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Unable to load schools from Firebase.", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Red600)
+                            if (refreshErrorMessage != null) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(refreshErrorMessage!!, fontSize = 12.sp, color = Slate500)
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = { triggerRefresh() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Retry")
+                            }
+                        }
                     }
                 }
             }

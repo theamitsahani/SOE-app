@@ -90,12 +90,13 @@ class AuthRepository(private val context: Context) {
         // Firestore role comparison must be case-insensitive.
         // Accept: EMPLOYEE, employee, Employee -> normalized internally to UserRole.EMPLOYEE.name
         // Do not accidentally classify ADMIN users as employees.
-        val rawRole = (doc.getString("role") ?: "EMPLOYEE").trim()
+        val rawRole = (doc.getString("role") ?: "").trim()
         val normalizedRole = when {
             rawRole.equals("ADMIN", ignoreCase = true) -> UserRole.ADMIN.name
             rawRole.equals("EMPLOYEE", ignoreCase = true) -> UserRole.EMPLOYEE.name
-            else -> UserRole.EMPLOYEE.name
+            else -> null
         }
+        if (normalizedRole == null) return null
 
         // Status must also be normalized: ACTIVE, INACTIVE
         val rawStatus = (doc.getString("status") ?: "ACTIVE").trim()
