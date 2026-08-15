@@ -3,12 +3,16 @@ package com.example.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.data.model.School
 import com.example.data.model.Visit
+import com.example.ui.admin.PhotoGridItem
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.ByteArrayInputStream
@@ -16,7 +20,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.util.UUID
+import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 data class ImportValidationResult(
     val totalRows: Int,
@@ -528,5 +534,120 @@ object ExcelHelper {
         writer.close()
         shareFile(context, file, "$schoolName Photos Archive", "text/plain")
         return file
+    }
+
+    /**
+     * Downloads/reads and packages filtered photos into a true .zip archive based on active filters.
+     */
+    suspend fun exportPhotosAsZip(
+        context: Context,
+        photos: List<PhotoGridItem>,
+        filterDescription: String,
+        onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }
+    ): File = withContext(Dispatchers.IO) {
+        val cleanFilter = filterDescription.replace(Regex("[^a-zA-Z0-9_]"), "_").take(30)
+        val zipFile = File(context.cacheDir, "SOE_Photos_${cleanFilter}_${System.currentTimeMillis()}.zip")
+
+        ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
+            // 1. Write an Index / Summary txt inside the zip
+            val summaryText = buildString {
+                appendLine("=====================================================")
+                appendLine("SOE School Visit Photo Gallery Archive")
+                appendLine("Generated: ${java.util.Date()}")
+                appendLine("Active Filter: $filterDescription")
+                appendLine("Total Filtered Photos: ${photos.size}")
+                appendLine("=====================================================\n")
+                appendLine("INDEX OF ARCHIVED PHOTOS:")
+                photos.forEachIndexed { index, item ->
+                    appendLine("${index + 1}. School: ${item.schoolName}")
+                    appendLine("   Category: ${item.categoryName}")
+                    appendLine("   Location: ${item.state} • ${item.district} • ${item.block}")
+                    appendLine("   Visit Date: ${item.date}")
+                    appendLine("   Source: ${item.url}")
+                    appendLine("-----------------------------------------------------")
+                }
+            }
+            val summaryEntry = ZipEntry("Photos_Summary_Index.txt")
+            zos.putNextEntry(summaryEntry)
+            zos.write(summaryText.toByteArray(Charsets.UTF_8))
+            zos.closeEntry()
+
+            // 2. Fetch and package each image/media into the zip
+            val usedEntryNames = mutableSetOf<String>()
+
+            photos.forEachIndexed { index, item ->
+                withContext(Dispatchers.Main) {
+                    onProgress(index + 1, photos.size)
+                }
+                try {
+                    val bytes = readMediaBytes(context, item.url)
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val ext = getExtensionFromUrl(item.url)
+                        val safeSchool = item.schoolName.replace(Regex("[^a-zA-Z0-9_ -]"), "_").trim().ifBlank { "School" }
+                        val safeCategory = item.categoryName.replace(Regex("[^a-zA-Z0-9_ -]"), "_").trim().ifBlank { "Photo" }
+                        val safeDistrict = item.district.replace(Regex("[^a-zA-Z0-9_ -]"), "_").trim().ifBlank { "District" }
+
+                        var entryName = "$safeDistrict/$safeSchool/${safeCategory}_${index + 1}.$ext"
+                        if (usedEntryNames.contains(entryName)) {
+                            entryName = "$safeDistrict/$safeSchool/${safeCategory}_${index + 1}_${System.currentTimeMillis() % 1000}.$ext"
+                        }
+                        usedEntryNames.add(entryName)
+
+                        val entry = ZipEntry(entryName)
+                        zos.putNextEntry(entry)
+                        zos.write(bytes)
+                        zos.closeEntry()
+                    }
+                } catch (e: Exception) {
+                    Log.e("ExcelHelper", "Failed to add photo #${index + 1} (${item.url}) to zip", e)
+                }
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            shareFile(context, zipFile, "SOE Photos Archive ($filterDescription)", "application/zip")
+        }
+        zipFile
+    }
+
+    private fun readMediaBytes(context: Context, urlOrPath: String): ByteArray? {
+        return try {
+            when {
+                urlOrPath.startsWith("http://") || urlOrPath.startsWith("https://") -> {
+                    val conn = java.net.URL(urlOrPath).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 12000
+                    conn.readTimeout = 15000
+                    conn.instanceFollowRedirects = true
+                    conn.inputStream.use { it.readBytes() }
+                }
+                urlOrPath.startsWith("content://") -> {
+                    val uri = Uri.parse(urlOrPath)
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                }
+                urlOrPath.startsWith("file://") -> {
+                    val file = File(Uri.parse(urlOrPath).path ?: "")
+                    if (file.exists()) file.readBytes() else null
+                }
+                else -> {
+                    val file = File(urlOrPath)
+                    if (file.exists()) file.readBytes() else null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ExcelHelper", "Error reading media bytes for $urlOrPath", e)
+            null
+        }
+    }
+
+    private fun getExtensionFromUrl(url: String): String {
+        val lower = url.lowercase()
+        return when {
+            lower.contains(".png") -> "png"
+            lower.contains(".webp") -> "webp"
+            lower.contains(".mp4") -> "mp4"
+            lower.contains(".mov") -> "mov"
+            lower.contains(".3gp") -> "3gp"
+            else -> "jpg"
+        }
     }
 }

@@ -81,6 +81,7 @@ import java.util.UUID
 fun EmployeeManagementTab(
     employees: List<User>,
     onSaveEmployee: (User, (Result<Unit>) -> Unit) -> Unit,
+    onResetPassword: ((email: String, onComplete: (Result<Unit>) -> Unit) -> Unit)? = null,
     onRefreshEmployees: ((onComplete: (Result<Int>) -> Unit) -> Unit)? = null,
     onRefresh: (() -> Unit)? = null
 ) {
@@ -121,6 +122,9 @@ fun EmployeeManagementTab(
     var showAddEmployeeInfoDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<User?>(null) }
     var selectedEmployeeForDetails by remember { mutableStateOf<User?>(null) }
+    var employeeToResetPassword by remember { mutableStateOf<User?>(null) }
+    var isSendingResetPassword by remember { mutableStateOf(false) }
+    var resetPasswordErrorMessage by remember { mutableStateOf<String?>(null) }
     var successNotification by remember { mutableStateOf<String?>(null) }
 
     val filteredEmployees = remember(employees, searchQuery) {
@@ -401,6 +405,40 @@ fun EmployeeManagementTab(
                         }
                     }
 
+                    // Reset Password Button
+                    Surface(
+                        color = Slate100,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Password Reset", fontSize = 11.sp, color = Slate500, fontWeight = FontWeight.Medium)
+                                Text("Firebase Auth Email Reset", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Navy900)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val targetEmp = emp
+                                    selectedEmployeeForDetails = null
+                                    resetPasswordErrorMessage = null
+                                    employeeToResetPassword = targetEmp
+                                },
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(13.dp), tint = Indigo600)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Reset Password", fontSize = 11.sp, color = Indigo600, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
                     // Toggle Status Option
                     Row(
                         modifier = Modifier
@@ -621,6 +659,23 @@ fun EmployeeManagementTab(
                             )
                         )
                     }
+
+                    // Reset Password Button in Edit Dialog
+                    OutlinedButton(
+                        onClick = {
+                            val targetEmp = emp.copy(email = email.trim())
+                            employeeToEdit = null
+                            resetPasswordErrorMessage = null
+                            employeeToResetPassword = targetEmp
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp), tint = Indigo600)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Send Password Reset Email", fontSize = 12.sp, color = Indigo600, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             confirmButton = {
@@ -664,6 +719,136 @@ fun EmployeeManagementTab(
                 TextButton(
                     onClick = { employeeToEdit = null },
                     enabled = !isSaving
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Password Reset Confirmation Dialog
+    if (employeeToResetPassword != null) {
+        val emp = employeeToResetPassword!!
+        AlertDialog(
+            onDismissRequest = {
+                if (!isSendingResetPassword) {
+                    employeeToResetPassword = null
+                    resetPasswordErrorMessage = null
+                }
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = Indigo600,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Reset Officer Password",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = Navy900
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Send password reset instructions to officer's registered email:",
+                        fontSize = 13.sp,
+                        color = Slate700
+                    )
+                    Surface(
+                        color = Slate100,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = emp.name,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Slate500
+                            )
+                            Text(
+                                text = emp.email,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Navy900
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Firebase Authentication will deliver an email containing a secure password reset link to this address.",
+                        fontSize = 11.sp,
+                        color = Slate500
+                    )
+
+                    if (resetPasswordErrorMessage != null) {
+                        Surface(
+                            color = Red600.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = resetPasswordErrorMessage!!,
+                                color = Red600,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (onResetPassword != null && emp.email.isNotBlank()) {
+                            isSendingResetPassword = true
+                            resetPasswordErrorMessage = null
+                            onResetPassword(emp.email) { result ->
+                                isSendingResetPassword = false
+                                if (result.isSuccess) {
+                                    successNotification = "Password reset email sent successfully."
+                                    employeeToResetPassword = null
+                                } else {
+                                    resetPasswordErrorMessage = result.exceptionOrNull()?.localizedMessage ?: "Unable to send password reset email. Please try again."
+                                }
+                            }
+                        } else {
+                            employeeToResetPassword = null
+                        }
+                    },
+                    enabled = !isSendingResetPassword && emp.email.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isSendingResetPassword) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Sending...", fontSize = 13.sp)
+                    } else {
+                        Text("Send Reset Email", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        employeeToResetPassword = null
+                        resetPasswordErrorMessage = null
+                    },
+                    enabled = !isSendingResetPassword
                 ) {
                     Text("Cancel")
                 }

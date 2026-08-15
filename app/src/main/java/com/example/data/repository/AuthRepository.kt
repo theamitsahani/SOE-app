@@ -532,20 +532,68 @@ class AuthRepository(private val context: Context) {
         }
     }
 
+    fun mapPasswordResetErrorToUserMessage(throwable: Throwable): String {
+        val rootCause: Throwable = throwable.cause ?: throwable
+        val rawMessage = (rootCause.message ?: throwable.message ?: "").lowercase()
+        val className = rootCause.javaClass.simpleName
+
+        return when {
+            rawMessage.contains("badly formatted") ||
+            rawMessage.contains("invalid email") ||
+            rawMessage.contains("invalid_email") ||
+            rawMessage.contains("the email address is badly formatted") ||
+            className.contains("FirebaseAuthInvalidCredentialsException") && rawMessage.contains("email") -> {
+                "Please enter a valid email address."
+            }
+
+            rawMessage.contains("user_not_found") ||
+            rawMessage.contains("user not found") ||
+            rawMessage.contains("no user record") ||
+            className.contains("FirebaseAuthInvalidUserException") -> {
+                "No user account found with this email address."
+            }
+
+            rawMessage.contains("too_many_requests") ||
+            rawMessage.contains("too many requests") ||
+            rawMessage.contains("quota exceeded") -> {
+                "Too many requests. Please wait a few moments and try again."
+            }
+
+            rawMessage.contains("network") ||
+            rawMessage.contains("connection") ||
+            rawMessage.contains("unable to resolve host") ||
+            rawMessage.contains("timeout") ||
+            rawMessage.contains("unreachable") ||
+            className.contains("FirebaseNetworkException") ||
+            rootCause is java.io.IOException ||
+            rootCause is java.net.UnknownHostException ||
+            rootCause is java.net.SocketTimeoutException ||
+            rootCause is java.net.ConnectException -> {
+                "Internet connection unavailable. Please try again."
+            }
+
+            else -> {
+                "Unable to send password reset email. Please try again."
+            }
+        }
+    }
+
     suspend fun sendPasswordResetEmail(email: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val trimmedEmail = email.trim()
             if (trimmedEmail.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
-                return@withContext Result.failure(Exception("Please provide a valid email address."))
+                return@withContext Result.failure(Exception("Please enter a valid email address."))
             }
 
             val fAuth = firebaseAuth ?: return@withContext Result.failure(Exception("Internet connection unavailable. Please try again."))
+            Log.d("AuthRepository", "Sending password reset email via Firebase Auth to: $trimmedEmail")
             val task = fAuth.sendPasswordResetEmail(trimmedEmail)
             com.google.android.gms.tasks.Tasks.await(task)
+            Log.d("AuthRepository", "Password reset email sent successfully to: $trimmedEmail")
             Result.success(Unit)
         } catch (e: Throwable) {
             Log.e("AuthRepository", "Failed to send password reset email to $email", e)
-            val friendlyMsg = mapAuthErrorToUserMessage(e)
+            val friendlyMsg = mapPasswordResetErrorToUserMessage(e)
             Result.failure(Exception(friendlyMsg))
         }
     }

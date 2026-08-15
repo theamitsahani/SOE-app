@@ -28,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -41,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +59,7 @@ import com.example.data.model.PhotoCategory
 import com.example.data.model.Visit
 import com.example.ui.theme.Indigo600
 import com.example.ui.theme.Navy900
+import com.example.ui.theme.Red600
 import com.example.ui.theme.Slate500
 import com.example.ui.theme.Slate700
 import com.example.util.ExcelHelper
@@ -64,6 +67,7 @@ import com.example.util.MediaStorageHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.launch
 
 data class PhotoGridItem(
     val url: String,
@@ -163,7 +167,21 @@ fun PhotoGalleryTab(
         }
     }
 
+    val filterDescription = remember(selectedState, selectedDistrict, selectedBlock, selectedSchoolName, selectedCategory) {
+        val parts = mutableListOf<String>()
+        if (selectedState != "All States") parts.add(selectedState)
+        if (selectedDistrict != "All Districts") parts.add(selectedDistrict)
+        if (selectedBlock != "All Blocks") parts.add(selectedBlock)
+        if (selectedSchoolName != "All Schools") parts.add(selectedSchoolName)
+        if (selectedCategory != "All Categories") parts.add(selectedCategory)
+        if (parts.isEmpty()) "All_Schools_Photos" else parts.joinToString("_")
+    }
+
+    val scope = rememberCoroutineScope()
     var previewMediaUrl by remember { mutableStateOf<String?>(null) }
+    var isExportingZip by remember { mutableStateOf(false) }
+    var exportProgressText by remember { mutableStateOf("") }
+    var exportErrorMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -175,22 +193,82 @@ fun PhotoGalleryTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("School Photo Gallery", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Navy900)
-                Text("${filteredPhotos.size} photos available", fontSize = 12.sp, color = Slate500)
+                Text("${filteredPhotos.size} photos matching filters", fontSize = 12.sp, color = Slate500)
             }
 
-            if (selectedSchoolName != "All Schools") {
-                Button(
-                    onClick = {
-                        ExcelHelper.downloadSchoolPhotosZip(context, selectedSchoolName, filteredPhotos.map { it.url })
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+            Button(
+                onClick = {
+                    if (filteredPhotos.isNotEmpty()) {
+                        isExportingZip = true
+                        exportProgressText = "Preparing ${filteredPhotos.size} photos..."
+                        exportErrorMessage = null
+                        scope.launch {
+                            try {
+                                ExcelHelper.exportPhotosAsZip(
+                                    context = context,
+                                    photos = filteredPhotos,
+                                    filterDescription = filterDescription
+                                ) { current, total ->
+                                    exportProgressText = "Archiving photo $current of $total..."
+                                }
+                            } catch (e: Exception) {
+                                exportErrorMessage = e.localizedMessage ?: "Failed to export ZIP file."
+                            } finally {
+                                isExportingZip = false
+                            }
+                        }
+                    }
+                },
+                enabled = filteredPhotos.isNotEmpty() && !isExportingZip,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                if (isExportingZip) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Download ZIP", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("Exporting...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Export ZIP (${filteredPhotos.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (exportErrorMessage != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = exportErrorMessage!!,
+                        color = Red600,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { exportErrorMessage = null },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Red600, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }
@@ -487,6 +565,45 @@ fun PhotoGalleryTab(
                             .background(Color.Black.copy(alpha = 0.6f))
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    // Export Progress Dialog
+    if (isExportingZip) {
+        Dialog(onDismissRequest = { /* prevent dismiss while creating zip */ }) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(48.dp),
+                        color = Indigo600,
+                        strokeWidth = 4.dp
+                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Exporting Photos ZIP",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Navy900
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = exportProgressText.ifBlank { "Packaging filtered photos into ZIP..." },
+                            fontSize = 13.sp,
+                            color = Slate500
+                        )
                     }
                 }
             }
