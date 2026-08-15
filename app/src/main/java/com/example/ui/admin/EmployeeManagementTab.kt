@@ -41,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -444,25 +445,48 @@ fun EmployeeManagementTab(
         var state by remember { mutableStateOf("Rajasthan") }
         var district by remember { mutableStateOf("Jaipur") }
         var isSaving by remember { mutableStateOf(false) }
+        var addErrorMessage by remember { mutableStateOf<String?>(null) }
 
         AlertDialog(
-            onDismissRequest = { showAddEmployeeDialog = false },
+            onDismissRequest = { if (!isSaving) showAddEmployeeDialog = false },
             title = { Text("Add New Field Officer", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    if (addErrorMessage != null) {
+                        Surface(
+                            color = Red600.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = addErrorMessage!!,
+                                color = Red600,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
                     OutlinedTextField(
                         value = name,
-                        onValueChange = { name = it },
+                        onValueChange = { 
+                            name = it
+                            addErrorMessage = null
+                        },
                         label = { Text("Full Name (नाम) *", fontSize = 11.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { 
+                            email = it
+                            addErrorMessage = null
+                        },
                         label = { Text("Email Address (ईमेल) *", fontSize = 11.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -497,6 +521,7 @@ fun EmployeeManagementTab(
                 Button(
                     onClick = {
                         isSaving = true
+                        addErrorMessage = null
                         val newEmp = User(
                             userId = "emp_" + UUID.randomUUID().toString().take(8),
                             name = name.trim(),
@@ -507,20 +532,35 @@ fun EmployeeManagementTab(
                             role = UserRole.EMPLOYEE,
                             status = UserStatus.ACTIVE
                         )
-                        onSaveEmployee(newEmp) {
+                        onSaveEmployee(newEmp) { result ->
                             isSaving = false
-                            showAddEmployeeDialog = false
+                            if (result.isSuccess) {
+                                showAddEmployeeDialog = false
+                            } else {
+                                addErrorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to create officer."
+                            }
                         }
                     },
                     enabled = !isSaving && name.isNotBlank() && email.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Create Officer")
+                    if (isSaving) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Create Officer")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddEmployeeDialog = false }) {
+                TextButton(
+                    onClick = { showAddEmployeeDialog = false },
+                    enabled = !isSaving
+                ) {
                     Text("Cancel")
                 }
             }
@@ -537,25 +577,48 @@ fun EmployeeManagementTab(
         var district by remember { mutableStateOf(emp.district) }
         var status by remember { mutableStateOf(emp.status) }
         var isSaving by remember { mutableStateOf(false) }
+        var editErrorMessage by remember { mutableStateOf<String?>(null) }
 
         AlertDialog(
-            onDismissRequest = { employeeToEdit = null },
+            onDismissRequest = { if (!isSaving) employeeToEdit = null },
             title = { Text("Edit Officer Details", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    if (editErrorMessage != null) {
+                        Surface(
+                            color = Red600.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = editErrorMessage!!,
+                                color = Red600,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
                     OutlinedTextField(
                         value = name,
-                        onValueChange = { name = it },
+                        onValueChange = { 
+                            name = it
+                            editErrorMessage = null
+                        },
                         label = { Text("Full Name", fontSize = 11.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { 
+                            email = it
+                            editErrorMessage = null
+                        },
                         label = { Text("Email Address", fontSize = 11.sp) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -605,6 +668,7 @@ fun EmployeeManagementTab(
                 Button(
                     onClick = {
                         isSaving = true
+                        editErrorMessage = null
                         val updated = emp.copy(
                             name = name.trim(),
                             email = email.trim(),
@@ -613,20 +677,35 @@ fun EmployeeManagementTab(
                             district = district.trim(),
                             status = status
                         )
-                        onSaveEmployee(updated) {
+                        onSaveEmployee(updated) { result ->
                             isSaving = false
-                            employeeToEdit = null
+                            if (result.isSuccess) {
+                                employeeToEdit = null
+                            } else {
+                                editErrorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to update officer."
+                            }
                         }
                     },
                     enabled = !isSaving && name.isNotBlank() && email.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Save Changes")
+                    if (isSaving) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Save Changes")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { employeeToEdit = null }) {
+                TextButton(
+                    onClick = { employeeToEdit = null },
+                    enabled = !isSaving
+                ) {
                     Text("Cancel")
                 }
             }
