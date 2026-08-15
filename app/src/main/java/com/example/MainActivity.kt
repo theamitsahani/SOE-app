@@ -194,9 +194,10 @@ class MainActivity : ComponentActivity() {
                                                             callback(res)
                                                         }
                                                     },
-                                                    onRefresh = {
+                                                    onRefreshEmployees = { callback ->
                                                         scope.launch {
-                                                            authRepository.syncEmployeesFromFirestore()
+                                                            val res = authRepository.refreshEmployeesFromFirestore()
+                                                            callback(res.map { it.size })
                                                         }
                                                     }
                                                 )

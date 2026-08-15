@@ -71,9 +71,10 @@ class AuthRepository(private val context: Context) {
     }
 
     private fun parseDocToUserEntity(doc: com.google.firebase.firestore.DocumentSnapshot): UserEntity? {
-        val docId = doc.id
+        // Authoritative User ID: The Firestore document ID is the Firebase Authentication UID
+        val docId = doc.id.trim()
         val explicitUid = doc.getString("userId")?.trim()
-        val userId = if (!explicitUid.isNullOrBlank()) explicitUid else docId
+        val userId = docId.ifBlank { explicitUid ?: "" }
         if (userId.isBlank()) return null
 
         val email = (doc.getString("email") ?: "").trim()
@@ -86,11 +87,23 @@ class AuthRepository(private val context: Context) {
         val state = (doc.getString("state") ?: "Rajasthan").trim().ifBlank { "Rajasthan" }
         val district = (doc.getString("district") ?: "").trim()
 
-        val rawRole = (doc.getString("role") ?: UserRole.EMPLOYEE.name).trim().uppercase()
-        val normalizedRole = if (rawRole == "ADMIN") UserRole.ADMIN.name else UserRole.EMPLOYEE.name
+        // Firestore role comparison must be case-insensitive.
+        // Accept: EMPLOYEE, employee, Employee -> normalized internally to UserRole.EMPLOYEE.name
+        // Do not accidentally classify ADMIN users as employees.
+        val rawRole = (doc.getString("role") ?: "EMPLOYEE").trim()
+        val normalizedRole = when {
+            rawRole.equals("ADMIN", ignoreCase = true) -> UserRole.ADMIN.name
+            rawRole.equals("EMPLOYEE", ignoreCase = true) -> UserRole.EMPLOYEE.name
+            else -> UserRole.EMPLOYEE.name
+        }
 
-        val rawStatus = (doc.getString("status") ?: UserStatus.ACTIVE.name).trim().uppercase()
-        val normalizedStatus = if (rawStatus == "INACTIVE") UserStatus.INACTIVE.name else UserStatus.ACTIVE.name
+        // Status must also be normalized: ACTIVE, INACTIVE
+        val rawStatus = (doc.getString("status") ?: "ACTIVE").trim()
+        val normalizedStatus = when {
+            rawStatus.equals("INACTIVE", ignoreCase = true) -> UserStatus.INACTIVE.name
+            rawStatus.equals("ACTIVE", ignoreCase = true) -> UserStatus.ACTIVE.name
+            else -> UserStatus.ACTIVE.name
+        }
 
         return UserEntity(
             userId = userId,
@@ -432,7 +445,64 @@ class AuthRepository(private val context: Context) {
 
     fun getAllEmployees(): Flow<List<User>> {
         return db.userDao().getAllUsers().map { entities ->
-            entities.map { e ->
+            entities.mapNotNull { e ->
+                val isEmployee = e.role.equals(UserRole.EMPLOYEE.name, ignoreCase = true)
+                if (!isEmployee) null
+                else User(
+                    userId = e.userId,
+                    name = e.name,
+                    email = e.email,
+                    mobile = e.mobile,
+                    state = e.state,
+                    district = e.district,
+                    role = UserRole.EMPLOYEE,
+                    status = if (e.status.equals("INACTIVE", ignoreCase = true)) UserStatus.INACTIVE else UserStatus.ACTIVE
+                )
+            }
+        }
+    }
+
+    suspend fun refreshEmployeesFromFirestore(): Result<List<User>> = withContext(Dispatchers.IO) {
+        Log.d("AuthRepository", "Employee sync started")
+        try {
+            val fAuth = firebaseAuth
+            if (fAuth == null || fAuth.currentUser == null) {
+                val errorMsg = "User is not authenticated. Please log in again."
+                Log.e("AuthRepository", "Employee sync failed: $errorMsg")
+                return@withContext Result.failure(Exception(errorMsg))
+            }
+
+            val fStore = firestore
+            if (fStore == null) {
+                val errorMsg = "Firestore service is unavailable."
+                Log.e("AuthRepository", "Employee sync failed: $errorMsg")
+                return@withContext Result.failure(Exception(errorMsg))
+            }
+
+            val snapshotTask = fStore.collection("users").get()
+            val snapshot = com.google.android.gms.tasks.Tasks.await(snapshotTask)
+            Log.d("AuthRepository", "Firestore users fetched: ${snapshot.size()}")
+
+            // Parse documents and filter role == EMPLOYEE (case-insensitively, avoiding ADMIN users)
+            val employeeEntities = snapshot.documents.mapNotNull { doc ->
+                val entity = parseDocToUserEntity(doc)
+                if (entity != null && entity.role.equals(UserRole.EMPLOYEE.name, ignoreCase = true)) {
+                    entity
+                } else {
+                    null
+                }
+            }
+
+            Log.d("AuthRepository", "Employees after role filter: ${employeeEntities.size}")
+
+            if (employeeEntities.isNotEmpty()) {
+                db.userDao().insertUsers(employeeEntities)
+                Log.d("AuthRepository", "Room cache updated: ${employeeEntities.size}")
+            } else {
+                Log.d("AuthRepository", "Room cache updated: 0")
+            }
+
+            val usersList = employeeEntities.map { e ->
                 User(
                     userId = e.userId,
                     name = e.name,
@@ -440,34 +510,25 @@ class AuthRepository(private val context: Context) {
                     mobile = e.mobile,
                     state = e.state,
                     district = e.district,
-                    role = if (e.role.equals("ADMIN", ignoreCase = true)) UserRole.ADMIN else UserRole.EMPLOYEE,
+                    role = UserRole.EMPLOYEE,
                     status = if (e.status.equals("INACTIVE", ignoreCase = true)) UserStatus.INACTIVE else UserStatus.ACTIVE
                 )
-            }.filter { it.role == UserRole.EMPLOYEE }
+            }
+
+            Log.d("AuthRepository", "Employee sync completed")
+            Result.success(usersList)
+        } catch (e: Exception) {
+            Log.e("AuthRepository", "Employee sync failed: ${e.message}", e)
+            Result.failure(e)
         }
     }
 
     suspend fun syncEmployeesFromFirestore(): Result<Int> = withContext(Dispatchers.IO) {
-        try {
-            val fAuth = firebaseAuth
-            if (fAuth?.currentUser == null) {
-                return@withContext Result.success(0)
-            }
-            val fStore = firestore ?: return@withContext Result.failure(Exception("Firestore not initialized"))
-            val snapshotTask = fStore.collection("users").get()
-            val snapshot = com.google.android.gms.tasks.Tasks.await(snapshotTask)
-
-            val users = snapshot.documents.mapNotNull { doc ->
-                parseDocToUserEntity(doc)
-            }
-
-            if (users.isNotEmpty()) {
-                db.userDao().insertUsers(users)
-            }
-            Result.success(users.size)
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Error syncing employees from Firestore", e)
-            Result.failure(e)
+        val result = refreshEmployeesFromFirestore()
+        if (result.isSuccess) {
+            Result.success(result.getOrNull()?.size ?: 0)
+        } else {
+            Result.failure(result.exceptionOrNull() ?: Exception("Failed to sync employees"))
         }
     }
 

@@ -31,11 +31,13 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -79,10 +81,40 @@ import java.util.UUID
 fun EmployeeManagementTab(
     employees: List<User>,
     onSaveEmployee: (User, (Result<Unit>) -> Unit) -> Unit,
+    onRefreshEmployees: ((onComplete: (Result<Int>) -> Unit) -> Unit)? = null,
     onRefresh: (() -> Unit)? = null
 ) {
+    var isRefreshing by remember { mutableStateOf(false) }
+    var refreshErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    fun triggerRefresh() {
+        if (onRefreshEmployees != null) {
+            isRefreshing = true
+            refreshErrorMessage = null
+            onRefreshEmployees.invoke { result ->
+                isRefreshing = false
+                if (result.isFailure) {
+                    val ex = result.exceptionOrNull()
+                    val rawMsg = ex?.message ?: ""
+                    refreshErrorMessage = if (rawMsg.contains("network", ignoreCase = true) ||
+                        rawMsg.contains("unavailable", ignoreCase = true) ||
+                        rawMsg.contains("connection", ignoreCase = true) ||
+                        rawMsg.contains("timeout", ignoreCase = true)) {
+                        "Unable to load employees. Please check your internet connection."
+                    } else if (rawMsg.contains("PERMISSION_DENIED", ignoreCase = true)) {
+                        "Permission denied while fetching employees from Firestore."
+                    } else {
+                        ex?.localizedMessage ?: "Unable to load employees. Please check your internet connection."
+                    }
+                }
+            }
+        } else {
+            onRefresh?.invoke()
+        }
+    }
+
     LaunchedEffect(Unit) {
-        onRefresh?.invoke()
+        triggerRefresh()
     }
 
     var searchQuery by remember { mutableStateOf("") }
@@ -137,6 +169,45 @@ fun EmployeeManagementTab(
                 }
             }
         }
+
+        if (refreshErrorMessage != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Firestore Sync Notice",
+                                color = Red600,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = refreshErrorMessage!!,
+                                color = Color(0xFF991B1B),
+                                fontSize = 11.sp
+                            )
+                        }
+                        TextButton(
+                            onClick = { triggerRefresh() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Retry", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Red600)
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier
@@ -150,15 +221,38 @@ fun EmployeeManagementTab(
                     Text("${employees.count { it.status == UserStatus.ACTIVE }} Active • ${employees.size} Total Officers", fontSize = 11.sp, color = Slate500)
                 }
 
-                Button(
-                    onClick = { showAddEmployeeInfoDialog = true },
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { triggerRefresh() },
+                        enabled = !isRefreshing,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Indigo600
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh from Firestore",
+                                tint = Indigo600,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Officer", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = { showAddEmployeeInfoDialog = true },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Officer", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -181,12 +275,42 @@ fun EmployeeManagementTab(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
+                            .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(Icons.Default.Group, contentDescription = null, tint = Slate500, modifier = Modifier.size(36.dp))
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text("No officers found matching search", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Slate500)
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(32.dp),
+                                strokeWidth = 3.dp,
+                                color = Indigo600
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Syncing field officers from Firestore...", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Indigo600)
+                        } else if (refreshErrorMessage != null && employees.isEmpty()) {
+                            Icon(Icons.Default.Group, contentDescription = null, tint = Red600, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Unable to load employees.", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Red600)
+                            Text("Please check your internet connection and try again.", fontSize = 12.sp, color = Slate500)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = { triggerRefresh() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                            ) {
+                                Text("Retry", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else if (searchQuery.isNotBlank()) {
+                            Icon(Icons.Default.Group, contentDescription = null, tint = Slate500, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("No officers found matching search", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Slate500)
+                        } else {
+                            Icon(Icons.Default.Group, contentDescription = null, tint = Slate500, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("No officers found in Firestore", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Navy900)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Tap '+ Add Officer' to view steps for adding officers via Firebase Console.", fontSize = 12.sp, color = Slate500, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        }
                     }
                 }
             }
