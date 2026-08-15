@@ -441,7 +441,7 @@ class AuthRepository(private val context: Context) {
             val currentAdminUid = fAuth?.currentUser?.uid ?: ""
 
             if (isNewEmployee) {
-                // 1. Check for duplicate email in Firestore
+                // 1. Check for duplicate email in Firestore first
                 if (fStore != null) {
                     try {
                         val queryTask = fStore.collection("users").whereEqualTo("email", cleanEmail).limit(1).get()
@@ -455,123 +455,70 @@ class AuthRepository(private val context: Context) {
                 }
 
                 // 2. Call secure Firebase Cloud Function createEmployeeUser (Firebase Admin SDK backend)
-                val fFunctions = FirebaseUtils.functions
-                if (fFunctions != null) {
-                    val data = hashMapOf(
-                        "name" to cleanName,
-                        "email" to cleanEmail,
-                        "mobile" to cleanMobile,
-                        "state" to cleanState,
-                        "district" to cleanDistrict
-                    )
+                val fFunctions = FirebaseUtils.functions 
+                    ?: return@withContext Result.failure(Exception("Firebase service unavailable. Please check your network connection."))
 
+                val data = hashMapOf(
+                    "name" to cleanName,
+                    "email" to cleanEmail,
+                    "mobile" to cleanMobile,
+                    "state" to cleanState,
+                    "district" to cleanDistrict
+                )
+
+                try {
+                    val resultTask = fFunctions.getHttpsCallable("createEmployeeUser").call(data)
+                    val callableResult = com.google.android.gms.tasks.Tasks.await(resultTask)
+                    val resultMap = callableResult.data as? Map<*, *>
+                    val assignedUid = (resultMap?.get("userId") as? String)?.takeIf { it.isNotBlank() } ?: user.userId
+
+                    // Cache in Room DB
+                    val entity = UserEntity(
+                        userId = assignedUid,
+                        name = cleanName,
+                        email = cleanEmail,
+                        mobile = cleanMobile,
+                        state = cleanState,
+                        district = cleanDistrict,
+                        role = UserRole.EMPLOYEE.name,
+                        status = UserStatus.ACTIVE.name
+                    )
+                    db.userDao().insertUser(entity)
+
+                    // Trigger sync to get latest documents
+                    syncEmployeesFromFirestore()
+
+                    // Automatically send password reset email so employee can set their password
                     try {
-                        val resultTask = fFunctions.getHttpsCallable("createEmployeeUser").call(data)
-                        val callableResult = com.google.android.gms.tasks.Tasks.await(resultTask)
-                        val resultMap = callableResult.data as? Map<*, *>
-                        val assignedUid = (resultMap?.get("userId") as? String)?.takeIf { it.isNotBlank() } ?: user.userId
-
-                        // Cache in Room DB
-                        val entity = UserEntity(
-                            userId = assignedUid,
-                            name = cleanName,
-                            email = cleanEmail,
-                            mobile = cleanMobile,
-                            state = cleanState,
-                            district = cleanDistrict,
-                            role = UserRole.EMPLOYEE.name,
-                            status = UserStatus.ACTIVE.name
-                        )
-                        db.userDao().insertUser(entity)
-
-                        // Automatically send password reset email so employee can set their password
-                        try {
-                            sendPasswordResetEmail(cleanEmail)
-                        } catch (e: Exception) {
-                            Log.w("AuthRepository", "Automated password reset email skipped: ${e.message}")
-                        }
-
-                        return@withContext Result.success(Unit)
-                    } catch (funcEx: Throwable) {
-                        Log.e("AuthRepository", "Cloud function createEmployeeUser error", funcEx)
-                        val errMsg = funcEx.message ?: ""
-                        if (errMsg.contains("already exists", ignoreCase = true) ||
-                            errMsg.contains("already in use", ignoreCase = true) ||
-                            errMsg.contains("ALREADY_EXISTS", ignoreCase = true)) {
-                            return@withContext Result.failure(Exception("An account with this email already exists."))
-                        }
-                        if (errMsg.contains("permission-denied", ignoreCase = true) || 
-                            errMsg.contains("PERMISSION_DENIED", ignoreCase = true)) {
-                            return@withContext Result.failure(Exception("Only Administrators can create employee accounts."))
-                        }
-
-                        // Fallback for development/offline if Cloud Function is not deployed yet
-                        if (errMsg.contains("NOT_FOUND", ignoreCase = true) || 
-                            errMsg.contains("UNAVAILABLE", ignoreCase = true) ||
-                            errMsg.contains("INTERNAL", ignoreCase = true)) {
-                            Log.w("AuthRepository", "Cloud function not yet reachable, writing to Firestore directly")
-                            val fallbackDocId = user.userId
-                            fStore?.collection("users")?.document(fallbackDocId)?.set(
-                                mapOf(
-                                    "userId" to fallbackDocId,
-                                    "name" to cleanName,
-                                    "email" to cleanEmail,
-                                    "mobile" to cleanMobile,
-                                    "state" to cleanState,
-                                    "district" to cleanDistrict,
-                                    "role" to UserRole.EMPLOYEE.name,
-                                    "status" to UserStatus.ACTIVE.name,
-                                    "createdAt" to System.currentTimeMillis(),
-                                    "createdBy" to currentAdminUid
-                                )
-                            )
-                            db.userDao().insertUser(
-                                UserEntity(
-                                    userId = fallbackDocId,
-                                    name = cleanName,
-                                    email = cleanEmail,
-                                    mobile = cleanMobile,
-                                    state = cleanState,
-                                    district = cleanDistrict,
-                                    role = UserRole.EMPLOYEE.name,
-                                    status = UserStatus.ACTIVE.name
-                                )
-                            )
-                            return@withContext Result.success(Unit)
-                        }
-
-                        return@withContext Result.failure(Exception(errMsg.ifBlank { "Unable to create employee account. Please try again." }))
+                        sendPasswordResetEmail(cleanEmail)
+                    } catch (e: Exception) {
+                        Log.w("AuthRepository", "Automated password reset email skipped: ${e.message}")
                     }
-                } else {
-                    // Fallback when functions SDK is unavailable
-                    val fallbackDocId = user.userId
-                    fStore?.collection("users")?.document(fallbackDocId)?.set(
-                        mapOf(
-                            "userId" to fallbackDocId,
-                            "name" to cleanName,
-                            "email" to cleanEmail,
-                            "mobile" to cleanMobile,
-                            "state" to cleanState,
-                            "district" to cleanDistrict,
-                            "role" to UserRole.EMPLOYEE.name,
-                            "status" to UserStatus.ACTIVE.name,
-                            "createdAt" to System.currentTimeMillis(),
-                            "createdBy" to currentAdminUid
-                        )
-                    )
-                    db.userDao().insertUser(
-                        UserEntity(
-                            userId = fallbackDocId,
-                            name = cleanName,
-                            email = cleanEmail,
-                            mobile = cleanMobile,
-                            state = cleanState,
-                            district = cleanDistrict,
-                            role = UserRole.EMPLOYEE.name,
-                            status = UserStatus.ACTIVE.name
-                        )
-                    )
+
                     return@withContext Result.success(Unit)
+                } catch (funcEx: Throwable) {
+                    Log.e("AuthRepository", "Cloud function createEmployeeUser error", funcEx)
+                    val errMsg = funcEx.message ?: ""
+                    
+                    if (errMsg.contains("already exists", ignoreCase = true) ||
+                        errMsg.contains("already in use", ignoreCase = true) ||
+                        errMsg.contains("ALREADY_EXISTS", ignoreCase = true) ||
+                        errMsg.contains("email-already-exists", ignoreCase = true)) {
+                        return@withContext Result.failure(Exception("An account with this email already exists."))
+                    }
+                    if (errMsg.contains("permission-denied", ignoreCase = true) || 
+                        errMsg.contains("PERMISSION_DENIED", ignoreCase = true)) {
+                        return@withContext Result.failure(Exception("Only Administrators can create employee accounts."))
+                    }
+                    if (errMsg.contains("unauthenticated", ignoreCase = true) ||
+                        errMsg.contains("UNAUTHENTICATED", ignoreCase = true)) {
+                        return@withContext Result.failure(Exception("Admin session expired. Please log in again."))
+                    }
+                    if (errMsg.contains("NOT_FOUND", ignoreCase = true)) {
+                        return@withContext Result.failure(Exception("Cloud Function 'createEmployeeUser' is not deployed yet. Please deploy the function in Firebase."))
+                    }
+
+                    return@withContext Result.failure(Exception(errMsg.ifBlank { "Unable to create employee account. Please try again." }))
                 }
             } else {
                 // Updating existing employee profile (status, name, mobile, etc.)

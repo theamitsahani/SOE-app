@@ -87,6 +87,7 @@ fun EmployeeManagementTab(
     var showResetPasswordConfirmFor by remember { mutableStateOf<User?>(null) }
     var isResettingPassword by remember { mutableStateOf(false) }
     var resetPasswordStatusMessage by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var successNotification by remember { mutableStateOf<String?>(null) }
 
     val filteredEmployees = remember(employees, searchQuery) {
         if (searchQuery.isBlank()) employees
@@ -104,6 +105,36 @@ fun EmployeeManagementTab(
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        if (successNotification != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = successNotification!!,
+                            color = Color(0xFF15803D),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(
+                            onClick = { successNotification = null },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("OK", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D))
+                        }
+                    }
+                }
+            }
+        }
         item {
             Row(
                 modifier = Modifier
@@ -536,8 +567,14 @@ fun EmployeeManagementTab(
                             isSaving = false
                             if (result.isSuccess) {
                                 showAddEmployeeDialog = false
+                                successNotification = "Employee created successfully."
                             } else {
-                                addErrorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to create officer."
+                                val err = result.exceptionOrNull()?.localizedMessage ?: "Failed to create officer."
+                                addErrorMessage = if (err.contains("already exists", ignoreCase = true)) {
+                                    "An account with this email already exists."
+                                } else {
+                                    err
+                                }
                             }
                         }
                     },

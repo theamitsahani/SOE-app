@@ -9,11 +9,13 @@ admin.initializeApp();
  * Securely creates a Firebase Authentication user account and corresponding Firestore
  * user document (role: "EMPLOYEE", status: "ACTIVE") on behalf of an authenticated Admin.
  * 
- * Verifications:
- * 1. Caller is authenticated.
- * 2. Caller has role == "ADMIN" in Firestore `users/{callerUID}`.
- * 3. Duplicate email detection before creation.
- * 4. Password is NOT stored anywhere in Firestore or client; password reset email can be sent.
+ * Security & Data Rules:
+ * 1. Caller must be authenticated with Firebase Auth.
+ * 2. Caller must have role == "ADMIN" in Firestore `users/{callerUID}`.
+ * 3. Checks for duplicate email in Firebase Auth and Firestore.
+ * 4. Passwords are NEVER stored in Firestore or database logs.
+ * 5. Uses Firebase Admin SDK to create the user account in Firebase Auth.
+ * 6. Admin session is completely unaffected and remains logged in.
  */
 exports.createEmployeeUser = functions.https.onCall(async (data, context) => {
   // 1. Verify Authentication
@@ -28,15 +30,16 @@ exports.createEmployeeUser = functions.https.onCall(async (data, context) => {
   const db = admin.firestore();
 
   // 2. Verify Caller is an ADMIN in Firestore
-  const callerDoc = await db.collection("users").doc(callerUid).get();
-  if (!callerDoc.exists) {
-    throw new functions.https.HttpsError(
-      "permission-denied",
-      "Admin profile not found. Access denied."
-    );
+  let callerRole = "";
+  try {
+    const callerDoc = await db.collection("users").doc(callerUid).get();
+    if (callerDoc.exists) {
+      callerRole = (callerDoc.data().role || "").toUpperCase();
+    }
+  } catch (err) {
+    console.error("Error reading caller profile:", err);
   }
 
-  const callerRole = (callerDoc.data().role || "").toUpperCase();
   if (callerRole !== "ADMIN") {
     throw new functions.https.HttpsError(
       "permission-denied",
@@ -50,12 +53,13 @@ exports.createEmployeeUser = functions.https.onCall(async (data, context) => {
   const mobile = (data.mobile || "").trim();
   const state = (data.state || "Rajasthan").trim();
   const district = (data.district || "").trim();
+  const rawPassword = (data.password || "").trim();
 
   if (!name) {
-    throw new functions.https.HttpsError("invalid-argument", "Name is required.");
+    throw new functions.https.HttpsError("invalid-argument", "Please enter the officer's full name.");
   }
   if (!email || !email.includes("@")) {
-    throw new functions.https.HttpsError("invalid-argument", "A valid email address is required.");
+    throw new functions.https.HttpsError("invalid-argument", "Please enter a valid email address.");
   }
 
   // 4. Check for duplicate email in Firebase Authentication
@@ -68,40 +72,50 @@ exports.createEmployeeUser = functions.https.onCall(async (data, context) => {
       );
     }
   } catch (error) {
-    // If error is 'auth/user-not-found', we can proceed. If it's already-exists, rethrow it.
     if (error.code === "auth/email-already-exists" || error.code === "already-exists") {
       throw new functions.https.HttpsError(
         "already-exists",
         "An account with this email already exists."
       );
     }
-    if (error.code !== "auth/user-not-found") {
-      // If error is custom HttpsError from above, rethrow
-      if (error instanceof functions.https.HttpsError) {
-        throw error;
-      }
+    if (error.code !== "auth/user-not-found" && !(error instanceof functions.https.HttpsError)) {
+      console.warn("getUserByEmail check:", error.message);
     }
   }
 
-  // Also check Firestore for any duplicate email record
-  const existingFirestoreDocs = await db.collection("users").where("email", "==", email).limit(1).get();
-  if (!existingFirestoreDocs.empty) {
-    throw new functions.https.HttpsError(
-      "already-exists",
-      "An account with this email already exists."
-    );
+  // Check Firestore for duplicate email
+  try {
+    const existingFirestoreDocs = await db.collection("users").where("email", "==", email).limit(1).get();
+    if (!existingFirestoreDocs.empty) {
+      throw new functions.https.HttpsError(
+        "already-exists",
+        "An account with this email already exists."
+      );
+    }
+  } catch (error) {
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
   }
 
   // 5. Create Firebase Authentication user with Admin SDK
+  const userCreatePayload = {
+    email: email,
+    displayName: name,
+    disabled: false
+  };
+
+  // If password provided and >= 6 characters, set initial password in Auth ONLY (never in Firestore)
+  if (rawPassword && rawPassword.length >= 6) {
+    userCreatePayload.password = rawPassword;
+  }
+
   let newUserRecord;
   try {
-    newUserRecord = await admin.auth().createUser({
-      email: email,
-      displayName: name,
-      disabled: false
-    });
+    newUserRecord = await admin.auth().createUser(userCreatePayload);
   } catch (authError) {
-    if (authError.code === "auth/email-already-exists") {
+    console.error("Firebase Admin createUser failed:", authError);
+    if (authError.code === "auth/email-already-exists" || authError.message?.includes("already exists")) {
       throw new functions.https.HttpsError(
         "already-exists",
         "An account with this email already exists."
@@ -130,7 +144,7 @@ exports.createEmployeeUser = functions.https.onCall(async (data, context) => {
       createdBy: callerUid
     });
   } catch (firestoreError) {
-    // If Firestore write fails, rollback auth user to prevent orphaned credentials
+    console.error("Firestore document write failed, rolling back auth account:", firestoreError);
     try {
       await admin.auth().deleteUser(newUid);
     } catch (delError) {
