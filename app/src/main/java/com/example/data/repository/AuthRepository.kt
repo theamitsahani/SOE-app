@@ -30,17 +30,15 @@ class AuthRepository(private val context: Context) {
 
     private var usersListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
 
-    init {
-        startListeningToFirestoreUsers()
-    }
-
     fun startListeningToFirestoreUsers() {
         if (usersListenerRegistration != null) return
+        val fAuth = firebaseAuth ?: return
+        if (fAuth.currentUser == null) return
         val fStore = firestore ?: return
         try {
             usersListenerRegistration = fStore.collection("users").addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.w("AuthRepository", "Users collection snapshot listener error: ${error.message}")
+                    Log.w("AuthRepository", "Users collection snapshot listener notice: ${error.message}")
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
@@ -61,6 +59,15 @@ class AuthRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.w("AuthRepository", "Failed to attach snapshot listener", e)
         }
+    }
+
+    fun stopListeningToFirestoreUsers() {
+        try {
+            usersListenerRegistration?.remove()
+        } catch (e: Exception) {
+            Log.w("AuthRepository", "Error removing snapshot listener", e)
+        }
+        usersListenerRegistration = null
     }
 
     private fun parseDocToUserEntity(doc: com.google.firebase.firestore.DocumentSnapshot): UserEntity? {
@@ -172,6 +179,7 @@ class AuthRepository(private val context: Context) {
                             )
                         )
                         _currentUser.value = user
+                        startListeningToFirestoreUsers()
                         return@withContext user
                     } else {
                         // User document does not exist in Firestore
@@ -204,6 +212,7 @@ class AuthRepository(private val context: Context) {
                         status = UserStatus.ACTIVE
                     )
                     _currentUser.value = user
+                    startListeningToFirestoreUsers()
                     return@withContext user
                 }
             }
@@ -319,6 +328,7 @@ class AuthRepository(private val context: Context) {
             )
 
             _currentUser.value = authenticatedUser
+            startListeningToFirestoreUsers()
             Result.success(authenticatedUser)
         } catch (e: Throwable) {
             firebaseAuth?.signOut()
@@ -404,6 +414,7 @@ class AuthRepository(private val context: Context) {
     }
 
     fun logout() {
+        stopListeningToFirestoreUsers()
         firebaseAuth?.signOut()
         _currentUser.value = null
     }
@@ -438,6 +449,10 @@ class AuthRepository(private val context: Context) {
 
     suspend fun syncEmployeesFromFirestore(): Result<Int> = withContext(Dispatchers.IO) {
         try {
+            val fAuth = firebaseAuth
+            if (fAuth?.currentUser == null) {
+                return@withContext Result.success(0)
+            }
             val fStore = firestore ?: return@withContext Result.failure(Exception("Firestore not initialized"))
             val snapshotTask = fStore.collection("users").get()
             val snapshot = com.google.android.gms.tasks.Tasks.await(snapshotTask)

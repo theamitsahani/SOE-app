@@ -102,13 +102,15 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 ScreenState.Employee(sessionUser)
                             }
-                        }
 
-                        // Background sync data from Firestore into local cache
-                        launch { authRepository.syncEmployeesFromFirestore() }
-                        launch { schoolRepository.syncSchoolsFromFirestore() }
-                        launch { visitRepository.syncVisitsFromFirestore() }
-                        launch { taskRepository.syncTasksFromFirestore() }
+                            // Background sync data from Firestore into local cache when authenticated
+                            if (sessionUser.role == UserRole.ADMIN) {
+                                launch { authRepository.syncEmployeesFromFirestore() }
+                            }
+                            launch { schoolRepository.syncSchoolsFromFirestore() }
+                            launch { visitRepository.syncVisitsFromFirestore() }
+                            launch { taskRepository.syncTasksFromFirestore() }
+                        }
 
                         syncManager.checkPendingCount()
                         isInitializing = false
@@ -133,9 +135,14 @@ class MainActivity : ComponentActivity() {
                                                     val user = result.getOrNull()!!
                                                     if (user.role == UserRole.ADMIN) {
                                                         currentScreen = ScreenState.Admin(user)
+                                                        launch { authRepository.syncEmployeesFromFirestore() }
                                                     } else {
                                                         currentScreen = ScreenState.Employee(user)
                                                     }
+                                                    launch { schoolRepository.syncSchoolsFromFirestore() }
+                                                    launch { visitRepository.syncVisitsFromFirestore() }
+                                                    launch { taskRepository.syncTasksFromFirestore() }
+
                                                     onResult(Result.success(Unit))
                                                 } else {
                                                     onResult(Result.failure(result.exceptionOrNull()!!))

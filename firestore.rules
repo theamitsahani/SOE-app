@@ -7,29 +7,16 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    // Helper function to check if caller has ADMIN role
-    function isAdmin() {
-      return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "ADMIN";
-    }
 
     // Users Collection
     match /users/{userId} {
-      // Any authenticated user can read their own profile, Admins can read all
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      // Admins have full write permissions; employees can only update their own profile without altering role/status
-      allow write: if isAdmin() || (
-        isAuthenticated() && 
-        request.auth.uid == userId && 
-        (!exists(/databases/$(database)/documents/users/$(userId)) || (
-          request.resource.data.role == resource.data.role &&
-          request.resource.data.status == resource.data.status
-        ))
-      );
+      // Authenticated users can read users (Admins sync list, officers load profile)
+      allow read: if isAuthenticated();
+      // Authenticated users can update/write users
+      allow write: if isAuthenticated();
     }
     
-    // Tasks and Visits Collection
+    // Tasks, Visits, Schools and other Collections
     match /{document=**} {
       allow read, write: if isAuthenticated();
     }
