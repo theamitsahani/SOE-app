@@ -79,7 +79,6 @@ import java.util.UUID
 fun EmployeeManagementTab(
     employees: List<User>,
     onSaveEmployee: (User, (Result<Unit>) -> Unit) -> Unit,
-    onResetPassword: ((String, (Result<Unit>) -> Unit) -> Unit)? = null,
     onRefresh: (() -> Unit)? = null
 ) {
     LaunchedEffect(Unit) {
@@ -87,12 +86,9 @@ fun EmployeeManagementTab(
     }
 
     var searchQuery by remember { mutableStateOf("") }
-    var showAddEmployeeDialog by remember { mutableStateOf(false) }
+    var showAddEmployeeInfoDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<User?>(null) }
     var selectedEmployeeForDetails by remember { mutableStateOf<User?>(null) }
-    var showResetPasswordConfirmFor by remember { mutableStateOf<User?>(null) }
-    var isResettingPassword by remember { mutableStateOf(false) }
-    var resetPasswordStatusMessage by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var successNotification by remember { mutableStateOf<String?>(null) }
 
     val filteredEmployees = remember(employees, searchQuery) {
@@ -155,7 +151,7 @@ fun EmployeeManagementTab(
                 }
 
                 Button(
-                    onClick = { showAddEmployeeDialog = true },
+                    onClick = { showAddEmployeeInfoDialog = true },
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Indigo600)
@@ -306,32 +302,6 @@ fun EmployeeManagementTab(
                             )
                         )
                     }
-
-                    // Reset Password Button for Admin
-                    OutlinedButton(
-                        onClick = {
-                            val targetEmp = emp
-                            selectedEmployeeForDetails = null
-                            showResetPasswordConfirmFor = targetEmp
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Key,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = Indigo600
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Reset Password (पासवर्ड रीसेट लिंक भेजें)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Indigo600
-                        )
-                    }
                 }
             },
             confirmButton = {
@@ -357,254 +327,76 @@ fun EmployeeManagementTab(
         )
     }
 
-    // Reset Password Confirmation Dialog
-    if (showResetPasswordConfirmFor != null) {
-        val emp = showResetPasswordConfirmFor!!
+    // Informational Dialog: Adding Employees
+    if (showAddEmployeeInfoDialog) {
         AlertDialog(
-            onDismissRequest = {
-                if (!isResettingPassword) {
-                    showResetPasswordConfirmFor = null
-                }
-            },
+            onDismissRequest = { showAddEmployeeInfoDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Key,
+                        imageVector = Icons.Default.Person,
                         contentDescription = null,
                         tint = Indigo600,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Reset Password", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900)
+                    Text("Adding Field Officers", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900)
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
-                        text = "Send a secure password reset link to ${emp.name}'s registered email address?",
+                        text = "Employees are added directly from the Firebase Console:",
                         fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = Navy900
                     )
+
+                    Surface(
+                        color = Slate100,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("1. Firebase Authentication:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
+                            Text("Go to Authentication → Users → Add User (Enter email & password).", fontSize = 12.sp, color = Slate700)
+                            Text("Copy the generated User UID.", fontSize = 12.sp, color = Slate700)
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("2. Cloud Firestore:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Indigo600)
+                            Text("Go to Firestore → users collection → Add document with the copied UID as Document ID:", fontSize = 12.sp, color = Slate700)
+                            Text("• role: \"EMPLOYEE\"", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Navy900)
+                            Text("• status: \"ACTIVE\"", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Navy900)
+                            Text("• name: (Officer's Full Name)", fontSize = 11.sp, color = Slate700)
+                            Text("• email: (Officer's Email)", fontSize = 11.sp, color = Slate700)
+                            Text("• mobile: (Contact Number)", fontSize = 11.sp, color = Slate700)
+                            Text("• state: \"Rajasthan\"", fontSize = 11.sp, color = Slate700)
+                            Text("• district: (e.g. \"Jaipur\")", fontSize = 11.sp, color = Slate700)
+                        }
+                    }
+
                     Text(
-                        text = emp.email,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Indigo600
-                    )
-                    Text(
-                        text = "The reset link is generated securely by Firebase Authentication. No passwords are saved or stored in the database.",
-                        fontSize = 11.sp,
+                        text = "Once created in Firebase, the officer will automatically synchronize and appear in this list.",
+                        fontSize = 12.sp,
                         color = Slate500
                     )
                 }
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        isResettingPassword = true
-                        onResetPassword?.invoke(emp.email) { result ->
-                            isResettingPassword = false
-                            showResetPasswordConfirmFor = null
-                            if (result.isSuccess) {
-                                resetPasswordStatusMessage = Pair(true, "Password reset link sent successfully to ${emp.email}")
-                            } else {
-                                val err = result.exceptionOrNull()?.localizedMessage ?: "Failed to send reset link."
-                                resetPasswordStatusMessage = Pair(false, err)
-                            }
-                        } ?: run {
-                            isResettingPassword = false
-                            showResetPasswordConfirmFor = null
-                        }
-                    },
-                    enabled = !isResettingPassword && emp.email.isNotBlank(),
+                    onClick = { showAddEmployeeInfoDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    if (isResettingPassword) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Send Reset Link")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showResetPasswordConfirmFor = null },
-                    enabled = !isResettingPassword
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    // Password Reset Result Feedback Dialog
-    if (resetPasswordStatusMessage != null) {
-        val (isSuccess, msg) = resetPasswordStatusMessage!!
-        AlertDialog(
-            onDismissRequest = { resetPasswordStatusMessage = null },
-            title = {
-                Text(
-                    text = if (isSuccess) "Email Sent" else "Notice",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = Navy900
-                )
-            },
-            text = {
-                Text(
-                    text = msg,
-                    fontSize = 13.sp,
-                    color = if (isSuccess) Navy900 else Red600
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { resetPasswordStatusMessage = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("OK")
-                }
-            }
-        )
-    }
-
-    // Add Employee Dialog
-    if (showAddEmployeeDialog) {
-        var name by remember { mutableStateOf("") }
-        var email by remember { mutableStateOf("") }
-        var mobile by remember { mutableStateOf("") }
-        var state by remember { mutableStateOf("Rajasthan") }
-        var district by remember { mutableStateOf("Jaipur") }
-        var isSaving by remember { mutableStateOf(false) }
-        var addErrorMessage by remember { mutableStateOf<String?>(null) }
-
-        AlertDialog(
-            onDismissRequest = { if (!isSaving) showAddEmployeeDialog = false },
-            title = { Text("Add New Field Officer", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Navy900) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (addErrorMessage != null) {
-                        Surface(
-                            color = Red600.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = addErrorMessage!!,
-                                color = Red600,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { 
-                            name = it
-                            addErrorMessage = null
-                        },
-                        label = { Text("Full Name (नाम) *", fontSize = 11.sp) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { 
-                            email = it
-                            addErrorMessage = null
-                        },
-                        label = { Text("Email Address (ईमेल) *", fontSize = 11.sp) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = mobile,
-                        onValueChange = { mobile = it },
-                        label = { Text("Mobile Number (मोबाइल)", fontSize = 11.sp) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = state,
-                            onValueChange = { state = it },
-                            label = { Text("State (राज्य)", fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = district,
-                            onValueChange = { district = it },
-                            label = { Text("District (जिला)", fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        isSaving = true
-                        addErrorMessage = null
-                        val newEmp = User(
-                            userId = "emp_" + UUID.randomUUID().toString().take(8),
-                            name = name.trim(),
-                            email = email.trim(),
-                            mobile = mobile.trim(),
-                            state = state.trim().ifBlank { "Rajasthan" },
-                            district = district.trim(),
-                            role = UserRole.EMPLOYEE,
-                            status = UserStatus.ACTIVE
-                        )
-                        onSaveEmployee(newEmp) { result ->
-                            isSaving = false
-                            if (result.isSuccess) {
-                                showAddEmployeeDialog = false
-                                successNotification = "Employee created successfully."
-                            } else {
-                                val err = result.exceptionOrNull()?.localizedMessage ?: "Failed to create officer."
-                                addErrorMessage = if (err.contains("already exists", ignoreCase = true)) {
-                                    "An account with this email already exists."
-                                } else {
-                                    err
-                                }
-                            }
-                        }
-                    },
-                    enabled = !isSaving && name.isNotBlank() && email.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Indigo600),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    if (isSaving) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Create Officer")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showAddEmployeeDialog = false },
-                    enabled = !isSaving
-                ) {
-                    Text("Cancel")
+                    Text("Got it")
                 }
             }
         )

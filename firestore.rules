@@ -18,8 +18,15 @@ service cloud.firestore {
     match /users/{userId} {
       // Any authenticated user can read their own profile, Admins can read all
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      // Only Admins can update/write users collection
-      allow write: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      // Admins have full write permissions; employees can only update their own profile without altering role/status
+      allow write: if isAdmin() || (
+        isAuthenticated() && 
+        request.auth.uid == userId && 
+        (!exists(/databases/$(database)/documents/users/$(userId)) || (
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.status == resource.data.status
+        ))
+      );
     }
     
     // Tasks and Visits Collection

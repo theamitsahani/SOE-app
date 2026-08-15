@@ -187,12 +187,6 @@ class MainActivity : ComponentActivity() {
                                                             callback(res)
                                                         }
                                                     },
-                                                    onResetPassword = { email, callback ->
-                                                        scope.launch {
-                                                            val res = authRepository.sendPasswordResetEmail(email)
-                                                            callback(res)
-                                                        }
-                                                    },
                                                     onRefresh = {
                                                         scope.launch {
                                                             authRepository.syncEmployeesFromFirestore()
