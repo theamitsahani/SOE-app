@@ -16,6 +16,10 @@
 local.properties
 .env
 debug.keystore
+*.jks
+*.keystore
+keystore.properties
+SOE-release.jks
 
 # Never ignore google-services.json
 !google-services.json

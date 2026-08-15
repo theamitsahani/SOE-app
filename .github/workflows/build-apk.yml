@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build and Sign Release APK
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build APK
+    name: Build & Sign Release APK
     runs-on: ubuntu-latest
     env:
       ACTIONS_RUNNER_FORCE_NODE24: "true"
@@ -33,25 +33,68 @@ jobs:
             chmod +x ./gradlew
           fi
 
-      - name: Prepare Debug Keystore
+      - name: Restore Release Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -f "debug.keystore.base64" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-          else
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ERROR: KEYSTORE_BASE64 secret is not configured in repository secrets!"
+            exit 1
           fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "${{ github.workspace }}/SOE-release.jks"
+          chmod 600 "${{ github.workspace }}/SOE-release.jks"
 
-      - name: Build Debug APK
+      - name: Build Signed Release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/SOE-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           GRADLE_CMD="./gradlew"
           if [ ! -f "./gradlew" ]; then
             GRADLE_CMD="gradle"
           fi
-          $GRADLE_CMD assembleDebug --stacktrace --no-daemon -Dorg.gradle.configuration-cache=false -Dksp.incremental=false
+          $GRADLE_CMD :app:assembleRelease --stacktrace --no-daemon -Dorg.gradle.configuration-cache=false -Dksp.incremental=false
 
-      - name: Upload APK
+      - name: Verify APK Signature
+        run: |
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*unsigned*" | head -n 1)
+          if [ -z "$RELEASE_APK" ] || [ ! -f "$RELEASE_APK" ]; then
+            echo "ERROR: Release APK not found at app/build/outputs/apk/release/"
+            exit 1
+          fi
+          echo "Verifying APK: $RELEASE_APK"
+
+          # Locate apksigner tool in Android SDK
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ]; then
+            APKSIGNER="apksigner"
+          fi
+
+          # Verify signature (fails if unsigned or invalid)
+          echo "Running apksigner verification..."
+          $APKSIGNER verify --verbose "$RELEASE_APK"
+          if [ $? -ne 0 ]; then
+            echo "ERROR: APK is not signed or has invalid signature!"
+            exit 1
+          fi
+
+          echo "=================================================="
+          echo "APK SIGNATURE VERIFIED SUCCESSFULLY"
+          echo "=================================================="
+          # Print certificate fingerprints for verification
+          $APKSIGNER verify --print-certs "$RELEASE_APK" | grep -E "(Signer|SHA-256|SHA-1|Certificate DN)" || true
+
+      - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: SOE-School-Visit-App-Debug
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          name: SOE-release-signed
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+      - name: Cleanup Keystore
+        if: always()
+        run: |
+          rm -f "${{ github.workspace }}/SOE-release.jks"
+          rm -f "SOE-release.jks"
